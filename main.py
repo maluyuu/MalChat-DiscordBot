@@ -183,12 +183,6 @@ async def on_message(message):
                     'gemini-2.0-pro',
                     'gemini-2.0-flash-lite',
                     'gemini-2.0-flash-thinking',
-                    # Gemini 1.5 models
-                    'gemini-1.5-flash',
-                    'gemini-1.5-pro',
-                    # Gemini 1.0 models
-                    'gemini-1.0-pro',
-                    'gemini-1.0-pro-vision',
                     # Ollama models
                     'gemma2',
                     'gemma2JP',
@@ -209,12 +203,6 @@ async def on_message(message):
                         'gemini-2.0-pro (最高品質のモデル)',
                         'gemini-2.0-flash-lite (コスト効率の良いモデル)',
                         'gemini-2.0-flash-thinking (思考プロセスを含む推論モデル)',
-                        '=== Gemini 1.5 ===',
-                        'gemini-1.5-flash (高速なマルチモーダルモデル)',
-                        'gemini-1.5-pro (長文理解に優れたモデル)',
-                        '=== Gemini 1.0 ===',
-                        'gemini-1.0-pro (テキストのみの処理に特化)',
-                        'gemini-1.0-pro-vision (画像・動画理解に特化)',
                         '=== Ollama Models ===',
                         'gemma2',
                         'gemma2JP',
