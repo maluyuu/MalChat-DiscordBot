@@ -34,7 +34,7 @@ logger = setup_logger(__name__, 'bot.log')
 # グローバル変数の定義
 VERSION = '0.70'
 BOT_NAME = 'malChatbot'
-BOT_MODEL = 'gemini-1.5-flash'
+BOT_MODEL = 'gemini-2.0-flash'
 TOKEN = os.getenv('DISCORD_TOKEN')
 
 intents = discord.Intents.default()
