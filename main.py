@@ -252,8 +252,6 @@ async def on_message(message):
                 # チャンネルIDを取得
                 channel_id = message.channel.id
 
-                # チャットログの記録
-                await chat_history_manager.write_log_file(message.author.name, message.content, channel_id=channel_id)
 
                 if message.content.startswith('!malDebugChat'):
                     debugChat = True
@@ -402,10 +400,8 @@ async def on_message(message):
                                 await asyncio.sleep(1)  # レート制限を避けるため少し待機
                         else:
                             await message.reply(botAnswer, mention_author=False)
-
-                        await chat_history_manager.write_log_file('{BOT_NAME}', botAnswer, channel_id=channel_id)
             except Exception as e:
-                await message.reply(f"メッセージ処理中にエラが発生: {str(e)}", mention_author=False)
+                await message.reply(f"メッセージ処理中にエラーが発生: {str(e)}", mention_author=False)
                 raise
     except Exception as e:
         error_message = f"Error: {str(e)}\nError type: {type(e).__name__}\nError location: {__file__}, line={e.__traceback__.tb_lineno}"
