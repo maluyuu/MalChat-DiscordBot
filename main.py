@@ -275,7 +275,8 @@ async def on_message(message):
                 elif random.random() < 0.1:
                     needs_response = True
 
-                await message.channel.typing()
+                if needs_response:
+                    await message.channel.typing()
 
                 # 添付ファイルの処理
                 context, current_files = await process_attachments(message, question) if message.attachments else (None, None)
