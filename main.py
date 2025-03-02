@@ -32,6 +32,9 @@ load_dotenv()
 # ロギングの設定
 logger = setup_logger(__name__, 'bot.log')
 
+chanID_env = os.getenv('CHAN_ID')
+chanID = [int(x) for x in chanID_env.split(',')] if chanID_env else []
+
 # グローバル変数の定義
 VERSION = '0.80'
 BOT_NAME = 'MalChat'
@@ -43,7 +46,7 @@ intents.messages = True
 intents.guilds = True
 intents.message_content = True
 
-chanID = [1294489056419516489, 1294477340763488257, 1295238839031300116, 1295704008660488223, 1303367992318496831]
+#chanID = [1294489056419516489, 1294477340763488257, 1295238839031300116, 1295704008660488223, 1303367992318496831]
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
