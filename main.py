@@ -159,17 +159,6 @@ async def process_attachments(message, question: str) -> tuple[Optional[str], Op
     combined_context = '\n\n'.join(context) if context else None
     return combined_context, current_files
 
-# チャンネルアクセス権を確認する関数
-async def check_channel_permissions(message):
-    try:
-        # チャンネルのアクセス許可を取得
-        permissions = message.channel.permissions_for(message.guild.me)
-        # 読み取りとメッセージ送信のアクセス許可があるか確認
-        return permissions.read_messages and permissions.send_messages
-    except Exception as e:
-        logger.error(f"チャンネルアクセス権の確認中にエラーが発生しました: {e}")
-        return False
-
 @bot.event
 async def on_message(message):
     try:
@@ -259,9 +248,6 @@ async def on_message(message):
             await chat_history_manager.write_log_file('{BOT_NAME}', bot_response, channel_id=channel_id)
             logger.info(f"Channel ID: {channel_id}, Bot Response: {bot_response}")
         elif message.content.startswith('!malChat') or message.channel.id in chanID or message.content.startswith('!malDebugChat') or message.channel.type == discord.ChannelType.private:
-            # チャンネルアクセス権を確認
-            has_permissions = await check_channel_permissions(message)
-
             try:
                 # チャンネルIDを取得
                 channel_id = message.channel.id
@@ -279,15 +265,12 @@ async def on_message(message):
                 # チャット履歴にユーザーの質問を追加
                 await chat_history_manager.add_entry(
                     role=message.author.name,
-                    content=message.content,
-                    channel_id=channel_id
+                    content=message.content, channel_id=channel_id
                 )
                 
                 # 応答が必要かどうかを判定
                 needs_response = False
                 if message.channel.id in chanID or message.content.startswith('!malChat') or message.content.startswith('!malDebugChat') or message.channel.type == discord.ChannelType.private:
-                    needs_response = True
-                elif has_permissions and random.random() <= 0.1:
                     needs_response = True
 
                 await message.channel.typing()
@@ -416,7 +399,7 @@ async def on_message(message):
                 await message.reply(f"メッセージ処理中にエラが発生: {str(e)}", mention_author=False)
                 raise
     except Exception as e:
-        error_message = f"Error: {str(e)}\nError type: {type(e).__name__}\nError location: {__file__}, line {e.__traceback__.tb_lineno}"
+        error_message = f"Error: {str(e)}\nError type: {type(e).__name__}\nError location: {__file__}, line={e.__traceback__.tb_lineno}"
         print(error_message)
 
     # コマンド処理を確実に行う
