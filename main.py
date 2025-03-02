@@ -272,6 +272,10 @@ async def on_message(message):
                 needs_response = False
                 if message.channel.id in chanID or message.content.startswith('!malChat') or message.content.startswith('!malDebugChat') or message.channel.type == discord.ChannelType.private:
                     needs_response = True
+                elif message.reference:  # メッセージがリプライである場合
+                    referenced_message = await message.channel.fetch_message(message.reference.message_id)
+                    if referenced_message.author.id == bot.user.id:  # ボットへのリプライの場合
+                        needs_response = True
                 elif random.random() < 0.1:
                     needs_response = True
 
