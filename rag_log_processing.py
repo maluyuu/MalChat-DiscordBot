@@ -272,8 +272,12 @@ class ChatHistoryManager:
         # クエリに関連する履歴を検索する
         relevant_history = []
         for entry in history:
+            # 簡単なキーワードマッチング
             if query.lower() in entry['content'].lower():
                 relevant_history.append(entry)
+        
+        # より高度な関連性スコアリングを実装する場合は、ここに追加
+        
         return relevant_history[-6:] if relevant_history else []
 
 # グローバルなインスタンスを作成

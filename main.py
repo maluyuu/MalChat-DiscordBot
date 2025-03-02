@@ -262,11 +262,6 @@ async def on_message(message):
             # チャンネルアクセス権を確認
             has_permissions = await check_channel_permissions(message)
 
-            # chanIDに含まれないチャンネルの場合、1/10の確率で応答
-            if message.channel.id not in chanID and has_permissions:
-                if random.random() > 0.1:  # 90%の確率で応答しない
-                    return
-
             try:
                 # チャンネルIDを取得
                 channel_id = message.channel.id
@@ -287,6 +282,13 @@ async def on_message(message):
                     content=message.content,
                     channel_id=channel_id
                 )
+                
+                # 応答が必要かどうかを判定
+                needs_response = False
+                if message.channel.id in chanID or message.content.startswith('!malChat') or message.content.startswith('!malDebugChat') or message.channel.type == discord.ChannelType.private:
+                    needs_response = True
+                elif has_permissions and random.random() <= 0.1:
+                    needs_response = True
 
                 await message.channel.typing()
 
@@ -365,7 +367,7 @@ async def on_message(message):
                         await message.reply(botAnswer, mention_author=False)
                     else:
                         await message.reply('申し訳ありません。関連する情報が見つかりませんでした。', mention_author=False)
-                else:
+                elif needs_response:
                     # 検索が不要な場合は、ファイル情報のみを使用
                     if context:
                         response = await chat_with_model(get_bot_model(), messages=[
