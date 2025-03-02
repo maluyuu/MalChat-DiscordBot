@@ -335,11 +335,11 @@ async def on_message(message):
 
                 if needs_search:
                     await message.channel.typing()
-                    await message.reply('ウェブ検索を開始します...', mention_author=False)
+                    
 
                     search_query = await generate_search_keywords(question)
                     logger.debug(f"Generated search keywords: {search_query}")
-
+                    await message.reply(f"次の検索ワードでウェブ検索を開始します : {search_query}", mention_author=False)
                     links = await web_processing.get_links(search_query)
                     if links:
                         search_results = await web_processing.extract_data_from_links(links, search_query)
