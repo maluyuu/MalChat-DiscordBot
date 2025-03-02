@@ -24,6 +24,7 @@ from typing import Optional, List, Dict
 from utils.logger import setup_logger
 from chat_processing import chat_with_model
 import asyncio
+import random  # 確率応答のために追加
 
 # 環境変数の読み込み
 load_dotenv()
@@ -32,7 +33,7 @@ load_dotenv()
 logger = setup_logger(__name__, 'bot.log')
 
 # グローバル変数の定義
-VERSION = '0.70'
+VERSION = '0.80'
 BOT_NAME = 'MalChat'
 BOT_MODEL = 'gemini-2.0-flash'
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -158,6 +159,17 @@ async def process_attachments(message, question: str) -> tuple[Optional[str], Op
     combined_context = '\n\n'.join(context) if context else None
     return combined_context, current_files
 
+# チャンネルアクセス権を確認する関数
+async def check_channel_permissions(message):
+    try:
+        # チャンネルのアクセス許可を取得
+        permissions = message.channel.permissions_for(message.guild.me)
+        # 読み取りとメッセージ送信のアクセス許可があるか確認
+        return permissions.read_messages and permissions.send_messages
+    except Exception as e:
+        logger.error(f"チャンネルアクセス権の確認中にエラーが発生しました: {e}")
+        return False
+
 @bot.event
 async def on_message(message):
     try:
@@ -247,6 +259,14 @@ async def on_message(message):
             await chat_history_manager.write_log_file('{BOT_NAME}', bot_response, channel_id=channel_id)
             logger.info(f"Channel ID: {channel_id}, Bot Response: {bot_response}")
         elif message.content.startswith('!malChat') or message.channel.id in chanID or message.content.startswith('!malDebugChat') or message.channel.type == discord.ChannelType.private:
+            # チャンネルアクセス権を確認
+            has_permissions = await check_channel_permissions(message)
+
+            # chanIDに含まれないチャンネルの場合、1/10の確率で応答
+            if message.channel.id not in chanID and has_permissions:
+                if random.random() > 0.1:  # 90%の確率で応答しない
+                    return
+
             try:
                 # チャンネルIDを取得
                 channel_id = message.channel.id

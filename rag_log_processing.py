@@ -269,8 +269,12 @@ class ChatHistoryManager:
             return []
 
     async def _search_related(self, query: str, history: List[Dict]) -> List[Dict]:
-        # 簡単な実装として、最新の履歴を返す
-        return history[-6:] if history else []
+        # クエリに関連する履歴を検索する
+        relevant_history = []
+        for entry in history:
+            if query.lower() in entry['content'].lower():
+                relevant_history.append(entry)
+        return relevant_history[-6:] if relevant_history else []
 
 # グローバルなインスタンスを作成
 chat_history_manager = ChatHistoryManager()
