@@ -276,6 +276,8 @@ async def on_message(message):
                     referenced_message = await message.channel.fetch_message(message.reference.message_id)
                     if referenced_message.author.id == bot.user.id:  # ボットへのリプライの場合
                         needs_response = True
+                elif bot.user.mentioned_in(message): # botにメンションがあった場合
+                    needs_response = True
                 elif random.random() < 0.1:
                     needs_response = True
 
