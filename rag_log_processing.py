@@ -102,7 +102,7 @@ class ChatHistoryManager:
     def __init__(self):
         self.chat_histories: Dict = {}
         self.document_processor = DocumentProcessor()
-        self.bot_roles = {'malChatbot'}  # ボットのロール名を設定
+        self.bot_roles = {'MalChat'}  # ボットのロール名を設定
 
     async def process_uploaded_files(self, files: List[Dict]) -> None:
         for file in files:

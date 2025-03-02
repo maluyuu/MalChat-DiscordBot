@@ -1,4 +1,4 @@
-# malChatbot
+# MalChat
 
 ## プロジェクト概要
 - マルチモーダルな対話が可能なDiscordチャットボット

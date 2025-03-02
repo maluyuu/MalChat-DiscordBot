@@ -33,7 +33,7 @@ logger = setup_logger(__name__, 'bot.log')
 
 # グローバル変数の定義
 VERSION = '0.70'
-BOT_NAME = 'malChatbot'
+BOT_NAME = 'MalChat'
 BOT_MODEL = 'gemini-2.0-flash'
 TOKEN = os.getenv('DISCORD_TOKEN')
 
@@ -244,7 +244,7 @@ async def on_message(message):
             bot_response = response
             bot_response = re.sub(r'<think>.*?</think>', '', bot_response, flags=re.DOTALL)
             await message.reply(bot_response, mention_author=False)
-            await chat_history_manager.write_log_file('malChatbot', bot_response, channel_id=channel_id)
+            await chat_history_manager.write_log_file('{BOT_NAME}', bot_response, channel_id=channel_id)
             logger.info(f"Channel ID: {channel_id}, Bot Response: {bot_response}")
         elif message.content.startswith('!malChat') or message.channel.id in chanID or message.content.startswith('!malDebugChat') or message.channel.type == discord.ChannelType.private:
             try:
@@ -282,7 +282,7 @@ async def on_message(message):
 
                 # システムプロンプトの構築
                 system_prompt = (
-                    f'あなたの名前はmalChatbotで、maluyuuによって開発されたDiscord botです。\n'
+                    f'あなたの名前は{BOT_NAME}で、maluyuuによって開発されたDiscord botです。\n'
                     f'現在の時刻は: {dt_now}\n'
                     f'以下の情報を考慮して回答してください:\n'
                 )
@@ -389,7 +389,7 @@ async def on_message(message):
                         else:
                             await message.reply(botAnswer, mention_author=False)
 
-                        await chat_history_manager.write_log_file('malChatbot', botAnswer, channel_id=channel_id)
+                        await chat_history_manager.write_log_file('{BOT_NAME}', botAnswer, channel_id=channel_id)
             except Exception as e:
                 await message.reply(f"メッセージ処理中にエラが発生: {str(e)}", mention_author=False)
                 raise
