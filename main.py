@@ -36,7 +36,7 @@ chanID_env = os.getenv('CHAN_ID')
 chanID = [int(x) for x in chanID_env.split(',')] if chanID_env else []
 
 # グローバル変数の定義
-VERSION = '0.80'
+VERSION = '1.00'
 BOT_NAME = 'MalChat'
 BOT_MODEL = 'gemini-2.0-flash'
 TOKEN = os.getenv('DISCORD_TOKEN')
