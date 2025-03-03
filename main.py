@@ -286,12 +286,12 @@ async def on_message(message):
                 # 添付ファイルの処理
                 context, current_files = await process_attachments(message, question) if message.attachments else (None, None)
 
-                # 関連する履歴と文脈を取得（関連性の高い3件と最新の3件）
+                # 関連する履歴と文脈を取得（類似度0.5以上の関連履歴と最新10件）
                 relevant_history = await chat_history_manager.get_combined_history(
                     query=question,
                     channel_id=channel_id,
-                    related_count=3,
-                    recent_count=3
+                    similarity_threshold=0.5,
+                    recent_count=10
                 )
                 relevant_context = await chat_history_manager.get_relevant_context(question, current_files)
 
@@ -328,6 +328,7 @@ async def on_message(message):
                     'role': 'user',
                     'content': f'{system_prompt}\nそれを踏まえて次の質問に回答してください : {question}'
                 })
+                print(messages)
 
                 # 検索が必要かどうかを判断
                 needs_search = False

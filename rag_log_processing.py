@@ -328,11 +328,17 @@ class ChatHistoryManager:
         self,
         query: str,
         channel_id: Optional[str] = None,
-        related_count: int = 3,
-        recent_count: int = 3
+        similarity_threshold: float = 0.5,
+        recent_count: int = 10
     ) -> List[Dict]:
         """
         関連性の高い履歴と最新の履歴を組み合わせて取得する
+
+        Parameters:
+            query: 検索クエリ
+            channel_id: チャンネルID（オプション）
+            similarity_threshold: 関連性判定の閾値（0-1の範囲、デフォルト0.5）
+            recent_count: 取得する最新履歴の件数（デフォルト10件）
         """
         try:
             # チャンネルの履歴を取得
@@ -342,12 +348,17 @@ class ChatHistoryManager:
 
             # 関連性スコアを計算
             scored_entries = await self._calculate_relevance_scores(query, history)
-            related_history = [entry for _, entry in scored_entries[:related_count]]
+            
+            # 閾値以上の関連性を持つ履歴を全て取得
+            related_history = [
+                entry for score, entry in scored_entries
+                if score >= similarity_threshold
+            ]
 
             # 最新の履歴を取得
             recent_history = await self._get_recent_history(history, recent_count)
 
-            # 結果をマージして重複を除去
+            # 結果をマージして重複を除去（関連性の高い履歴を優先）
             return await self._merge_and_deduplicate(related_history, recent_history)
 
         except Exception as e:
@@ -360,7 +371,14 @@ class ChatHistoryManager:
         """
         try:
             # get_combined_historyを使用して関連履歴を取得
-            return await self.get_combined_history(query, None, related_count=3, recent_count=3)
+            # similarity_threshold=0.5で関連性の高い履歴を全て取得
+            # 最新10件の履歴も合わせて取得
+            return await self.get_combined_history(
+                query=query,
+                channel_id=None,
+                similarity_threshold=0.5,
+                recent_count=10
+            )
         except Exception as e:
             logger.error(f"Error in _search_related: {e}")
             return []
