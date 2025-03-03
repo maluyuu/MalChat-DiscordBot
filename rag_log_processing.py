@@ -20,7 +20,10 @@ logger = setup_logger(__name__, 'rag_processing.log')
 
 class DocumentProcessor:
     def __init__(self):
-        self.model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+        # GPUを無効化してCPUモードで実行
+        os.environ['CUDA_VISIBLE_DEVICES'] = ''
+        os.environ['USE_MPS'] = '0'
+        self.model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2', device='cpu')
         self.index = faiss.IndexFlatL2(384)  # モデルの出力次元数
         self.documents = []
         self.load_index()
