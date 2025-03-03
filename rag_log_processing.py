@@ -268,17 +268,102 @@ class ChatHistoryManager:
             logger.error(f"Error reading history: {e}")
             return []
 
-    async def _search_related(self, query: str, history: List[Dict]) -> List[Dict]:
-        # クエリに関連する履歴を検索する
-        relevant_history = []
+    async def _calculate_relevance_scores(self, query: str, history: List[Dict]) -> List[tuple[float, Dict]]:
+        """
+        履歴エントリーの関連性スコアを計算する
+        """
+        if not history:
+            return []
+
+        # クエリのエンベディングを計算
+        query_embedding = self.document_processor.model.encode(query)
+
+        # 各履歴エントリーのスコアを計算
+        scored_entries = []
         for entry in history:
-            # 簡単なキーワードマッチング
-            if query.lower() in entry['content'].lower():
-                relevant_history.append(entry)
+            if entry.get('content'):
+                # コンテンツのエンベディングを計算
+                content_embedding = self.document_processor.model.encode(entry['content'])
+                
+                # コサイン類似度を計算
+                similarity = np.dot(query_embedding, content_embedding) / (
+                    np.linalg.norm(query_embedding) * np.linalg.norm(content_embedding)
+                )
+                
+                scored_entries.append((similarity, entry))
+
+        # スコアの降順でソート
+        return sorted(scored_entries, key=lambda x: x[0], reverse=True)
+
+    async def _get_recent_history(self, history: List[Dict], count: int) -> List[Dict]:
+        """
+        最新の履歴を取得する
+        """
+        return history[-count:] if history else []
+
+    async def _merge_and_deduplicate(self, related: List[Dict], recent: List[Dict]) -> List[Dict]:
+        """
+        関連履歴と最新履歴をマージして重複を除去する
+        """
+        seen = set()
+        merged = []
         
-        # より高度な関連性スコアリングを実装する場合は、ここに追加
+        # 関連履歴を追加
+        for entry in related:
+            content_hash = hashlib.md5(entry['content'].encode()).hexdigest()
+            if content_hash not in seen:
+                seen.add(content_hash)
+                merged.append(entry)
         
-        return relevant_history[-6:] if relevant_history else []
+        # 最新履歴を追加（重複を除く）
+        for entry in recent:
+            content_hash = hashlib.md5(entry['content'].encode()).hexdigest()
+            if content_hash not in seen:
+                seen.add(content_hash)
+                merged.append(entry)
+        
+        return merged
+
+    async def get_combined_history(
+        self,
+        query: str,
+        channel_id: Optional[str] = None,
+        related_count: int = 3,
+        recent_count: int = 3
+    ) -> List[Dict]:
+        """
+        関連性の高い履歴と最新の履歴を組み合わせて取得する
+        """
+        try:
+            # チャンネルの履歴を取得
+            history = await self._read_history(channel_id)
+            if not history:
+                return []
+
+            # 関連性スコアを計算
+            scored_entries = await self._calculate_relevance_scores(query, history)
+            related_history = [entry for _, entry in scored_entries[:related_count]]
+
+            # 最新の履歴を取得
+            recent_history = await self._get_recent_history(history, recent_count)
+
+            # 結果をマージして重複を除去
+            return await self._merge_and_deduplicate(related_history, recent_history)
+
+        except Exception as e:
+            logger.error(f"Error getting combined history: {e}")
+            return []
+
+    async def _search_related(self, query: str, history: List[Dict]) -> List[Dict]:
+        """
+        クエリに関連する履歴を検索する
+        """
+        try:
+            # get_combined_historyを使用して関連履歴を取得
+            return await self.get_combined_history(query, None, related_count=3, recent_count=3)
+        except Exception as e:
+            logger.error(f"Error in _search_related: {e}")
+            return []
 
 # グローバルなインスタンスを作成
 chat_history_manager = ChatHistoryManager()
