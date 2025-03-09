@@ -12,7 +12,7 @@ from utils.logger import setup_logger
 from chat_processing import chat_with_model
 from typing import List, Dict, Optional
 import re
-from google import genai
+import google.generativeai as genai
 
 VERSION = '0.3.0'
 
