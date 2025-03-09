@@ -248,7 +248,7 @@ async def on_message(message):
             await message.reply(bot_response, mention_author=False)
             await chat_history_manager.write_log_file('{BOT_NAME}', bot_response, channel_id=channel_id)
             logger.info(f"Channel ID: {channel_id}, Bot Response: {bot_response}")
-        elif message.content.startswith('!malChat') or message.channel.id in chanID or message.content.startswith('!malDebugChat') or message.channel.type == discord.ChannelType.private or random.random() < 0.05:
+        elif message.content.startswith('!malChat') or message.channel.id in chanID or message.content.startswith('!malDebugChat') or message.channel.type == discord.ChannelType.private or random.random() < 1.00:
             try:
                 # チャンネルIDを取得
                 channel_id = message.channel.id
