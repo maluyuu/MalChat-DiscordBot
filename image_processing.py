@@ -10,11 +10,55 @@ import base64
 from io import BytesIO
 from utils.logger import setup_logger
 from chat_processing import chat_with_model
+from typing import List, Dict, Optional
+import re
+from google import genai
 
-VERSION = '0.2.0'
+VERSION = '0.3.0'
 
 # ロガーの設定
 logger = setup_logger(__name__, 'image_processing.log')
+
+class ImageGenSettings:
+    def __init__(self):
+        self.aspect_ratio = "1:1"
+        self.number_of_images = 1
+        self.safety_filter_level = "BLOCK_MEDIUM_AND_ABOVE"
+        self.person_generation = "ALLOW_ADULT"
+
+    def to_dict(self) -> Dict:
+        return {
+            "aspect_ratio": self.aspect_ratio,
+            "number_of_images": self.number_of_images,
+            "safety_filter_level": self.safety_filter_level,
+            "person_generation": self.person_generation
+        }
+
+class ImageGenTrigger:
+    def __init__(self):
+        self.visual_keywords = [
+            "描いて", "見せて", "生成して", "表示して",
+            "イメージ", "画像", "絵", "図",
+            "ビジュアル", "グラフィック"
+        ]
+        self.context_patterns = [
+            r"どんな(様子|感じ)",
+            r"(どう|どのように)見える",
+            r"視覚化",
+            r"想像して",
+            r"例を示して"
+        ]
+
+    def should_generate(self, text: str) -> bool:
+        # キーワードによる判定
+        if any(keyword in text for keyword in self.visual_keywords):
+            return True
+        
+        # パターンによる判定
+        if any(re.search(pattern, text) for pattern in self.context_patterns):
+            return True
+        
+        return False
 
 async def version():
     return VERSION
@@ -28,6 +72,80 @@ body_cascade_path = cv2.data.haarcascades + 'haarcascade_fullbody.xml'
 face_cascade = cv2.CascadeClassifier(face_cascade_path)
 cat_cascade = cv2.CascadeClassifier(cat_cascade_path)
 body_cascade = cv2.CascadeClassifier(body_cascade_path)
+
+# Gemini APIのクライアント設定
+imagen_client = None
+image_gen_settings = ImageGenSettings()
+image_gen_trigger = ImageGenTrigger()
+
+def init_imagen_client(api_key: str):
+    global imagen_client
+    genai.configure(api_key=api_key)
+    imagen_client = genai.Client()
+
+async def optimize_prompt(text: str) -> str:
+    """
+    会話の文脈から最適な画像生成プロンプトを生成
+    """
+    try:
+        # Gemini APIを使用してプロンプトを最適化
+        response = await chat_with_model('gemini-2.0-pro', messages=[
+            {
+                'role': 'user',
+                'content': f'''
+                以下のテキストから、画像生成に適した英語のプロンプトを生成してください。
+                装飾的な説明は不要で、プロンプトのみを出力してください。
+
+                テキスト: {text}
+                '''
+            }
+        ])
+        return response.strip()
+    except Exception as e:
+        logger.error(f"Error optimizing prompt: {e}")
+        # エラーの場合は元のテキストを英語に翻訳して返す
+        response = await chat_with_model('gemini-2.0-pro', messages=[
+            {
+                'role': 'user',
+                'content': f'Translate this to English: {text}'
+            }
+        ])
+        return response.strip()
+
+async def generate_image_with_gemini(prompt: str, config: Optional[Dict] = None) -> List[BytesIO]:
+    """
+    Gemini APIを使用して画像を生成
+    """
+    if imagen_client is None:
+        raise ValueError("Imagen client is not initialized. Call init_imagen_client first.")
+
+    try:
+        # 設定の準備
+        gen_config = config or image_gen_settings.to_dict()
+        
+        # 画像生成
+        response = imagen_client.models.generate_images(
+            model='imagen-3.0-generate-002',
+            prompt=prompt,
+            config=genai.types.GenerateImagesConfig(
+                number_of_images=gen_config['number_of_images'],
+                aspect_ratio=gen_config['aspect_ratio'],
+                safety_filter_level=gen_config['safety_filter_level'],
+                person_generation=gen_config['person_generation']
+            )
+        )
+
+        # 生成された画像をBytesIOオブジェクトのリストとして返す
+        images = []
+        for generated_image in response.generated_images:
+            image_bytes = BytesIO(generated_image.image.image_bytes)
+            images.append(image_bytes)
+        
+        return images
+
+    except Exception as e:
+        logger.error(f"Error generating image: {e}")
+        raise
 
 async def process_img_with_ollama(img, question, bot_model):
     # 画像をリサイズして最適化
@@ -123,7 +241,6 @@ async def detect_objects_in_imageV2(img): # YOLOで物体検出
             response += (f"Detected object: {class_name}")
 
     # Print the total number of detected objects
-    #total_objects = sum(len(result.boxes.data) for result in results)
     print(response)
 
     return response

@@ -261,11 +261,38 @@ async def on_message(message):
 
                 question = message.content.replace('!malChat', '').strip()
 
+                # Gemini APIのキーを設定
+                if not hasattr(bot, 'imagen_initialized'):
+                    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+                    if GEMINI_API_KEY:
+                        image_processing.init_imagen_client(GEMINI_API_KEY)
+                        bot.imagen_initialized = True
+
                 # チャット履歴にユーザーの質問を追加
                 await chat_history_manager.add_entry(
                     role=message.author.name,
                     content=message.content, channel_id=channel_id
                 )
+
+                # 画像生成が必要かどうかを判断
+                if hasattr(bot, 'imagen_initialized') and image_processing.image_gen_trigger.should_generate(question):
+                    try:
+                        await message.channel.typing()
+                        # プロンプトを最適化
+                        optimized_prompt = await image_processing.optimize_prompt(question)
+                        # 画像を生成
+                        images = await image_processing.generate_image_with_gemini(optimized_prompt)
+                        
+                        # 画像を送信
+                        for i, image_bytes in enumerate(images, 1):
+                            image_bytes.seek(0)
+                            await message.channel.send(
+                                f"生成された画像 {i}/{len(images)}",
+                                file=discord.File(fp=image_bytes, filename=f'generated_image_{i}.png')
+                            )
+                    except Exception as e:
+                        logger.error(f"Error generating image: {e}")
+                        await message.channel.send("画像の生成中にエラーが発生しました。")
                 
                 # 応答が必要かどうかを判定
                 needs_response = False
