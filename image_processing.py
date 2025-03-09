@@ -81,7 +81,6 @@ image_gen_trigger = ImageGenTrigger()
 def init_imagen_client(api_key: str):
     global imagen_client
     genai.configure(api_key=api_key)
-    imagen_client = genai.Client()
 
 async def optimize_prompt(text: str) -> str:
     """
@@ -89,57 +88,54 @@ async def optimize_prompt(text: str) -> str:
     """
     try:
         # Gemini APIを使用してプロンプトを最適化
-        response = await chat_with_model('gemini-2.0-pro', messages=[
-            {
-                'role': 'user',
-                'content': f'''
-                以下のテキストから、画像生成に適した英語のプロンプトを生成してください。
-                装飾的な説明は不要で、プロンプトのみを出力してください。
+        model = genai.GenerativeModel('gemini-pro')
+        response = await model.generate_content_async(
+            f'''
+            以下のテキストから、画像生成に適した英語のプロンプトを生成してください。
+            装飾的な説明は不要で、プロンプトのみを出力してください。
 
-                テキスト: {text}
-                '''
-            }
-        ])
-        return response.strip()
+            テキスト: {text}
+            '''
+        )
+        return response.text.strip()
     except Exception as e:
         logger.error(f"Error optimizing prompt: {e}")
         # エラーの場合は元のテキストを英語に翻訳して返す
-        response = await chat_with_model('gemini-2.0-pro', messages=[
-            {
-                'role': 'user',
-                'content': f'Translate this to English: {text}'
-            }
-        ])
-        return response.strip()
+        model = genai.GenerativeModel('gemini-pro')
+        response = await model.generate_content_async(f'Translate this to English: {text}')
+        return response.text.strip()
 
 async def generate_image_with_gemini(prompt: str, config: Optional[Dict] = None) -> List[BytesIO]:
     """
     Gemini APIを使用して画像を生成
     """
-    if imagen_client is None:
-        raise ValueError("Imagen client is not initialized. Call init_imagen_client first.")
-
     try:
         # 設定の準備
         gen_config = config or image_gen_settings.to_dict()
         
+        # 画像生成モデルの設定
+        model = genai.GenerativeModel('gemini-pro-vision')
+        
         # 画像生成
-        response = imagen_client.models.generate_images(
-            model='imagen-3.0-generate-002',
-            prompt=prompt,
-            config=genai.types.GenerateImagesConfig(
-                number_of_images=gen_config['number_of_images'],
-                aspect_ratio=gen_config['aspect_ratio'],
-                safety_filter_level=gen_config['safety_filter_level'],
-                person_generation=gen_config['person_generation']
-            )
+        response = await model.generate_content_async(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                candidate_count=gen_config['number_of_images']
+            ),
+            safety_settings={
+                "HARM_CATEGORY_HARASSMENT": gen_config['safety_filter_level'],
+                "HARM_CATEGORY_HATE_SPEECH": gen_config['safety_filter_level'],
+                "HARM_CATEGORY_SEXUALLY_EXPLICIT": gen_config['safety_filter_level'],
+                "HARM_CATEGORY_DANGEROUS_CONTENT": gen_config['safety_filter_level']
+            }
         )
 
         # 生成された画像をBytesIOオブジェクトのリストとして返す
         images = []
-        for generated_image in response.generated_images:
-            image_bytes = BytesIO(generated_image.image.image_bytes)
-            images.append(image_bytes)
+        for part in response.candidates:
+            if hasattr(part, 'image') and part.image:
+                image_bytes = BytesIO(part.image.data)
+                images.append(image_bytes)
         
         return images
 
