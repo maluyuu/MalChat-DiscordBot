@@ -6,6 +6,7 @@ from ultralytics import YOLO
 import ollama
 import rag_log_processing
 import psutil
+import base64
 from io import BytesIO
 from utils.logger import setup_logger
 from chat_processing import chat_with_model
@@ -33,25 +34,35 @@ async def process_img_with_ollama(img, question, bot_model):
     max_size = (800, 800)
     img.thumbnail(max_size, Image.LANCZOS)
     
-    # メモリ使用量のしきい値を定数として定義
-    MEMORY_THRESHOLD_MB = 10000
-
     # 画像をバイト列に変換
     img_bytes = BytesIO()
     img.save(img_bytes, format='JPEG')
     img_bytes.seek(0)
 
-    memory_info = psutil.virtual_memory()
-    if (memory_info.used / 1024 / 1024) < MEMORY_THRESHOLD_MB:
-        response = await chat_with_model('llama3.2-vision', messages=[
+    # Geminiモデルの場合
+    if bot_model.startswith('gemini'):
+        response = await chat_with_model(bot_model, messages=[
             {
                 'role': 'user',
                 'content': question,
-                'images': [img_bytes.getvalue()]
+                'images': [{'mime_type': 'image/jpeg', 'data': base64.b64encode(img_bytes.getvalue()).decode('utf-8')}]
             }
         ])
     else:
-        response = await chat_with_model(bot_model, messages=[
+        # メモリ使用量のしきい値を定数として定義
+        MEMORY_THRESHOLD_MB = 10000
+        memory_info = psutil.virtual_memory()
+        
+        if (memory_info.used / 1024 / 1024) < MEMORY_THRESHOLD_MB:
+            response = await chat_with_model('llama3.2-vision', messages=[
+                {
+                    'role': 'user',
+                    'content': question,
+                    'images': [img_bytes.getvalue()]
+                }
+            ])
+        else:
+            response = await chat_with_model(bot_model, messages=[
             {
                 'role': 'user',
                 'content': (
