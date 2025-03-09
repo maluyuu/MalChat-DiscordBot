@@ -248,7 +248,7 @@ async def on_message(message):
             await message.reply(bot_response, mention_author=False)
             await chat_history_manager.write_log_file('{BOT_NAME}', bot_response, channel_id=channel_id)
             logger.info(f"Channel ID: {channel_id}, Bot Response: {bot_response}")
-        elif message.content.startswith('!malChat') or message.channel.id in chanID or message.content.startswith('!malDebugChat') or message.channel.type == discord.ChannelType.private or random.random() < 1.0:
+        elif message.content.startswith('!malChat') or message.channel.id in chanID or message.content.startswith('!malDebugChat') or message.channel.type == discord.ChannelType.private or random.random() < 0.05:
             try:
                 # チャンネルIDを取得
                 channel_id = message.channel.id
@@ -277,7 +277,7 @@ async def on_message(message):
                         needs_response = True
                 elif bot.user.mentioned_in(message): # botにメンションがあった場合
                     needs_response = True
-                elif random.random() < 0.1:
+                elif random.random() < 0.05:
                     needs_response = True
                     is_random_response = True
                 else:
