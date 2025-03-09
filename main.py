@@ -269,6 +269,8 @@ async def on_message(message):
                 
                 # 応答が必要かどうかを判定
                 needs_response = False
+                is_random_response = False
+
                 if message.channel.id in chanID or message.content.startswith('!malChat') or message.content.startswith('!malDebugChat') or message.channel.type == discord.ChannelType.private:
                     needs_response = True
                 elif message.reference:  # メッセージがリプライである場合
@@ -280,8 +282,6 @@ async def on_message(message):
                 elif random.random() < 0.05:
                     needs_response = True
                     is_random_response = True
-                else:
-                    is_random_response = False
 
                 if needs_response:
                     await message.channel.typing()
