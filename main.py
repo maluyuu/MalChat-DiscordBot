@@ -279,24 +279,34 @@ async def on_message(message):
                     needs_response = True
                 elif random.random() < 0.1:
                     needs_response = True
+                    is_random_response = True
+                else:
+                    is_random_response = False
 
                 if needs_response:
                     await message.channel.typing()
 
-                # 添付ファイルの処理
-                context, current_files = await process_attachments(message, question) if message.attachments else (None, None)
+                # ランダム応答でない場合のみ、添付ファイルと履歴の処理を行う
+                if not is_random_response:
+                    # 添付ファイルの処理
+                    context, current_files = await process_attachments(message, question) if message.attachments else (None, None)
 
-                # 関連する履歴と文脈を取得（類似度0.5以上の関連履歴と最新10件）
-                relevant_history = await chat_history_manager.get_combined_history(
-                    query=question,
-                    channel_id=channel_id,
-                    similarity_threshold=0.5,
-                    recent_count=10
-                )
-                relevant_context = await chat_history_manager.get_relevant_context(question, current_files)
+                    # 関連する履歴と文脈を取得（類似度0.5以上の関連履歴と最新10件）
+                    relevant_history = await chat_history_manager.get_combined_history(
+                        query=question,
+                        channel_id=channel_id,
+                        similarity_threshold=0.5,
+                        recent_count=10
+                    )
+                    relevant_context = await chat_history_manager.get_relevant_context(question, current_files)
 
-                if relevant_context:
-                    question = f"{relevant_context}\nこれを考慮して次の質問に回答してください:\n{question}"
+                    if relevant_context:
+                        question = f"{relevant_context}\nこれを考慮して次の質問に回答してください:\n{question}"
+                else:
+                    context = None
+                    current_files = None
+                    relevant_history = None
+                    relevant_context = None
 
                 # システムプロンプトの構築
                 system_prompt = (
@@ -330,15 +340,15 @@ async def on_message(message):
                 })
                 print(messages)
 
-                # 検索が必要かどうかを判断
+                # ランダム応答でない場合のみ、検索処理を行う
                 needs_search = False
-                if any(keyword in question.lower() for keyword in [
+                if not is_random_response and any(keyword in question.lower() for keyword in [
                     '調べ', 'ネットで', '検索', '最新', '最近', '現在', '今',
                     '事例', '具体例', '情報', 'ニュース'
                 ]):
                     needs_search = True
 
-                if needs_search:
+                if needs_search and not is_random_response:
                     await message.channel.typing()
                     
 
