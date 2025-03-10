@@ -27,7 +27,7 @@ import asyncio
 import random  # 確率応答のために追加
 
 # 環境変数の読み込み
-load_dotenv() #不要なコミット
+load_dotenv() #不要なコミットを追加
 
 # ロギングの設定
 logger = setup_logger(__name__, 'bot.log')
