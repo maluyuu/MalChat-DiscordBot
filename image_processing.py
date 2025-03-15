@@ -12,7 +12,8 @@ from utils.logger import setup_logger
 from chat_processing import chat_with_model
 from typing import List, Dict, Optional
 import re
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 VERSION = '0.3.0'
 
@@ -88,9 +89,10 @@ async def optimize_prompt(text: str) -> str:
     """
     try:
         # Gemini APIを使用してプロンプトを最適化
-        model = genai.GenerativeModel('gemini-pro')
-        response = await model.generate_content_async(
-            f'''
+        client = genai.Client()
+        response = client.models.generate_content(
+            model='gemini-pro',
+            contents=f'''
             以下のテキストから、画像生成に適した英語のプロンプトを生成してください。
             装飾的な説明は不要で、プロンプトのみを出力してください。
 
@@ -101,8 +103,11 @@ async def optimize_prompt(text: str) -> str:
     except Exception as e:
         logger.error(f"Error optimizing prompt: {e}")
         # エラーの場合は元のテキストを英語に翻訳して返す
-        model = genai.GenerativeModel('gemini-pro')
-        response = await model.generate_content_async(f'Translate this to English: {text}')
+        client = genai.Client()
+        response = client.models.generate_content(
+            model='gemini-pro',
+            contents=f'Translate this to English: {text}'
+        )
         return response.text.strip()
 
 async def generate_image_with_gemini(prompt: str, config: Optional[Dict] = None) -> List[BytesIO]:
@@ -112,16 +117,16 @@ async def generate_image_with_gemini(prompt: str, config: Optional[Dict] = None)
     try:
         # 設定の準備
         gen_config = config or image_gen_settings.to_dict()
-        
+
         # Gemini APIのクライアントを取得
         client = genai.Client()
 
-        contents = (prompt)
+        contents = prompt
 
         response = client.models.generate_content(
             model="models/gemini-2.0-flash-exp",
             contents=contents,
-            config=genai.types.GenerateContentConfig(response_modalities=['TEXT', 'IMAGE'])
+            config=types.GenerateContentConfig(response_modalities=['TEXT', 'IMAGE'])
         )
 
         # 生成された画像をBytesIOオブジェクトのリストとして返す
@@ -131,10 +136,10 @@ async def generate_image_with_gemini(prompt: str, config: Optional[Dict] = None)
                 if part.inline_data is not None:
                     image = Image.open(BytesIO(part.inline_data.data))
                     image_bytes = BytesIO()
-                    image.save(image_bytes, format=image.format if image.format else 'PNG') # PNGで保存
+                    image.save(image_bytes, format=image.format if image.format else 'PNG')  # PNGで保存
                     images.append(image_bytes)
                 elif part.text is not None:
-                    logger.info(f"テキストパート: {part.text}") # テキストパートをログ出力
+                    logger.info(f"テキストパート: {part.text}")  # テキストパートをログ出力
 
         return images
 
