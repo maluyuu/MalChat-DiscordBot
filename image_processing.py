@@ -80,7 +80,7 @@ image_gen_trigger = ImageGenTrigger()
 
 def init_imagen_client(api_key: str):
     global imagen_client
-    genai.configure(api_key=api_key)
+    imagen_client = genai.Client(api_key=api_key)
 
 async def optimize_prompt(text: str) -> str:
     """
@@ -113,30 +113,29 @@ async def generate_image_with_gemini(prompt: str, config: Optional[Dict] = None)
         # 設定の準備
         gen_config = config or image_gen_settings.to_dict()
         
-        # 画像生成モデルの設定
-        model = genai.GenerativeModel('gemini-pro-vision')
-        
-        # 画像生成
-        response = await model.generate_content_async(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                candidate_count=gen_config['number_of_images']
-            ),
-            safety_settings={
-                "HARM_CATEGORY_HARASSMENT": gen_config['safety_filter_level'],
-                "HARM_CATEGORY_HATE_SPEECH": gen_config['safety_filter_level'],
-                "HARM_CATEGORY_SEXUALLY_EXPLICIT": gen_config['safety_filter_level'],
-                "HARM_CATEGORY_DANGEROUS_CONTENT": gen_config['safety_filter_level']
-            }
+        # Gemini APIのクライアントを取得
+        client = genai.Client()
+
+        contents = (prompt)
+
+        response = client.models.generate_content(
+            model="models/gemini-2.0-flash-exp",
+            contents=contents,
+            config=genai.types.GenerateContentConfig(response_modalities=['TEXT', 'IMAGE'])
         )
 
         # 生成された画像をBytesIOオブジェクトのリストとして返す
         images = []
-        for part in response.candidates:
-            if hasattr(part, 'image') and part.image:
-                image_bytes = BytesIO(part.image.data)
-                images.append(image_bytes)
-        
+        for candidate in response.candidates:
+            for part in candidate.content.parts:
+                if part.inline_data is not None:
+                    image = Image.open(BytesIO(part.inline_data.data))
+                    image_bytes = BytesIO()
+                    image.save(image_bytes, format=image.format if image.format else 'PNG') # PNGで保存
+                    images.append(image_bytes)
+                elif part.text is not None:
+                    logger.info(f"テキストパート: {part.text}") # テキストパートをログ出力
+
         return images
 
     except Exception as e:
