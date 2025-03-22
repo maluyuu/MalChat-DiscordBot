@@ -74,78 +74,263 @@ face_cascade = cv2.CascadeClassifier(face_cascade_path)
 cat_cascade = cv2.CascadeClassifier(cat_cascade_path)
 body_cascade = cv2.CascadeClassifier(body_cascade_path)
 
-# Gemini APIのクライアント設定
-imagen_client = None
+# Gemini APIの設定
+GEMINI_API_VERSION = "v1"  # APIバージョンを明示的に指定
+
+# 利用可能なモデルの定義
+TEXT_MODELS = [
+    "gemini-1.0-pro",  # 優先的に使用
+    "gemini-pro"       # フォールバック
+]
+
+IMAGE_GEN_MODELS = [
+    "gemini-2.0-flash-exp-image-generation",  # 優先的に使用
+    "imagen-3.0-generate-002"                 # フォールバック
+]
+
+# クライアントとモデルの状態
+class GeminiState:
+    def __init__(self):
+        self.client = None
+        self.text_model = None
+        self.image_model = None
+        self.available_models = set()
+
+    def is_initialized(self) -> bool:
+        return self.client is not None
+
+    def get_text_model(self) -> str:
+        return self.text_model or TEXT_MODELS[-1]  # フォールバックとして最後のモデルを使用
+
+    def get_image_model(self) -> str:
+        return self.image_model or IMAGE_GEN_MODELS[-1]  # フォールバックとして最後のモデルを使用
+
+# グローバル状態の初期化
+gemini_state = GeminiState()
 image_gen_settings = ImageGenSettings()
 image_gen_trigger = ImageGenTrigger()
 
-def init_imagen_client(api_key: str):
-    global imagen_client
-    imagen_client = genai.Client(api_key=api_key)
+async def init_gemini_client(api_key: str):
+    """
+    Gemini APIクライアントを初期化し、利用可能なモデルを確認する
+    
+    Args:
+        api_key (str): Gemini APIキー
+        
+    Raises:
+        ValueError: APIキーが無効な場合やAPIが利用できない場合
+    """
+    if not api_key:
+        raise ValueError("GEMINI_API_KEYが設定されていません")
+    
+    try:
+        global gemini_state
+        # APIバージョンを明示的に指定してクライアントを初期化
+        gemini_state.client = genai.Client(
+            api_key=api_key,
+            api_version=GEMINI_API_VERSION
+        )
+
+        # 利用可能なモデルを確認
+        try:
+            models = gemini_state.client.list_models()
+            for model in models:
+                model_name = model.name.split('/')[-1]  # models/prefix を除去
+                gemini_state.available_models.add(model_name)
+                logger.info(f"検出されたモデル: {model_name}")
+
+            # テキスト生成モデルの選択
+            for model in TEXT_MODELS:
+                if model in gemini_state.available_models:
+                    gemini_state.text_model = model
+                    logger.info(f"テキスト生成に {model} を使用します")
+                    break
+
+            # 画像生成モデルの選択
+            for model in IMAGE_GEN_MODELS:
+                if model in gemini_state.available_models:
+                    gemini_state.image_model = model
+                    logger.info(f"画像生成に {model} を使用します")
+                    break
+
+            if not gemini_state.text_model:
+                logger.warning("利用可能なテキスト生成モデルが見つかりません")
+            if not gemini_state.image_model:
+                logger.warning("利用可能な画像生成モデルが見つかりません")
+            if not gemini_state.text_model and not gemini_state.image_model:
+                raise ValueError("利用可能なモデルが見つかりません")
+
+        except Exception as e:
+            logger.error(f"モデル一覧の取得中にエラーが発生: {e}")
+            gemini_state.client = None
+            raise ValueError(f"APIクライアントの初期化に失敗しました: {e}")
+
+        logger.info("Gemini APIクライアントの初期化が完了しました")
+        
+    except Exception as e:
+        raise ValueError(f"APIクライアントの初期化に失敗しました: {e}")
+
 
 async def optimize_prompt(text: str) -> str:
     """
     会話の文脈から最適な画像生成プロンプトを生成
     """
-    try:
-        # Gemini APIを使用してプロンプトを最適化
-        client = genai.Client()
-        response = client.models.generate_content(
-            model='gemini-pro',
-            contents=f'''
-            以下のテキストから、画像生成に適した英語のプロンプトを生成してください。
-            装飾的な説明は不要で、プロンプトのみを出力してください。
+    # クライアントの初期化確認
+    if not gemini_state.is_initialized():
+        logger.error("Gemini APIクライアントが初期化されていません")
+        raise ValueError("GEMINI_API_KEYが設定されていないか、クライアントが初期化されていません")
 
+    # 日本語テキストかどうかを判定
+    is_japanese = any(ord(c) > 127 for c in text)
+    
+    try:
+        if is_japanese:
+            prompt_template = f'''
+            以下の日本語テキストを、高品質な画像生成が可能な英語のプロンプトに変換してください。
+            できるだけ詳細な特徴を含め、写実的な画像が生成できるようにしてください。
+            装飾的な説明は不要で、プロンプトのみを出力してください。
             テキスト: {text}
             '''
+        else:
+            prompt_template = f'''
+            Convert the following text into a high-quality image generation prompt.
+            Include detailed characteristics to ensure photorealistic image generation.
+            Only output the prompt without any decorative explanations.
+            Text: {text}
+            '''
+
+        # プロンプト最適化に利用可能なモデルで試行
+        model = gemini_state.get_text_model()
+        response = gemini_state.client.models.generate_content(
+            model=model,
+            contents=prompt_template
         )
-        return response.text.strip()
+
+        if response and response.text:
+            optimized = response.text.strip()
+            logger.info(f"最適化されたプロンプト: {optimized}")
+            return optimized
+        else:
+            logger.warning("プロンプト最適化の応答が空でした")
+            if is_japanese:
+                return f"Create a photorealistic image of: {text}"
+            return text
     except Exception as e:
-        logger.error(f"Error optimizing prompt: {e}")
-        # エラーの場合は元のテキストを英語に翻訳して返す
-        client = genai.Client()
-        response = client.models.generate_content(
-            model='gemini-pro',
-            contents=f'Translate this to English: {text}'
-        )
-        return response.text.strip()
+        logger.warning(f"プロンプト最適化に失敗しました: {e}")
+        if is_japanese:
+            return f"Generate an image of: {text}"
+        return text
 
 async def generate_image_with_gemini(prompt: str, config: Optional[Dict] = None) -> List[BytesIO]:
     """
     Gemini APIを使用して画像を生成
+    Args:
+        prompt (str): 画像生成のためのプロンプト
+        config (Optional[Dict]): 追加の設定パラメータ（オプション）
+
+    Returns:
+        List[BytesIO]: 生成された画像のバイトストリームのリスト
     """
     try:
+        # クライアントの初期化確認
+        if not gemini_state.is_initialized():
+            logger.error("Gemini APIクライアントが初期化されていません")
+            raise ValueError("GEMINI_API_KEYが設定されていないか、クライアントが初期化されていません")
+
         # 設定の準備
         gen_config = config or image_gen_settings.to_dict()
 
-        # Gemini APIのクライアントを取得
-        client = genai.Client()
+        # プロンプトの最適化
+        optimized_prompt = await optimize_prompt(prompt)
+        logger.info(f"最適化されたプロンプト: {optimized_prompt}")
 
-        contents = prompt
-
-        response = client.models.generate_content(
-            model="models/gemini-2.0-flash-exp",
-            contents=contents,
-            config=types.GenerateContentConfig(response_modalities=['TEXT', 'IMAGE'])
+        # 生成設定
+        generate_content_config = types.GenerateContentConfig(
+            response_modalities=["Text", "Image"],
+            aspect_ratio=gen_config.get("aspect_ratio", "1:1"),
+            number_of_images=gen_config.get("number_of_images", 1)
         )
 
-        # 生成された画像をBytesIOオブジェクトのリストとして返す
-        images = []
-        for candidate in response.candidates:
-            for part in candidate.content.parts:
-                if part.inline_data is not None:
-                    image = Image.open(BytesIO(part.inline_data.data))
-                    image_bytes = BytesIO()
-                    image.save(image_bytes, format=image.format if image.format else 'PNG')  # PNGで保存
-                    images.append(image_bytes)
-                elif part.text is not None:
-                    logger.info(f"テキストパート: {part.text}")  # テキストパートをログ出力
+        # 画像生成の実行（優先的に使用するモデルから開始）
+        model = gemini_state.get_image_model()
+        return await _generate_with_model(
+            model,
+            optimized_prompt,
+            generate_content_config,
+            gen_config
+        )
 
-        return images
+    except ValueError as ve:
+        logger.error(f"バリデーションエラー: {ve}")
+        raise
+    except Exception as e:
+        logger.error(f"予期せぬエラーが発生しました: {e}")
+        raise
+
+async def _generate_with_model(model: str, prompt: str, config: types.GenerateContentConfig, gen_config: Dict) -> List[BytesIO]:
+    """
+    指定されたモデルを使用して画像を生成する内部メソッド
+    """
+    images = []
+    try:
+        if model == "gemini-2.0-flash-exp-image-generation":
+            response = gemini_state.client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=config
+            )
+            
+            if response.candidates:
+                for part in response.candidates[0].content.parts:
+                    if part.inline_data and part.inline_data.mime_type.startswith('image/'):
+                        image_data = part.inline_data.data
+                        image = Image.open(BytesIO(image_data))
+                        image_bytes = BytesIO()
+                        image.save(image_bytes, format='PNG')
+                        image_bytes.seek(0)
+                        images.append(image_bytes)
+                        logger.info(f"{model}で画像が正常に生成されました")
+                    elif part.text:
+                        logger.info(f"テキストパート: {part.text}")
+
+        elif model == "imagen-3.0-generate-002":
+            response = gemini_state.client.models.generate_images(
+                model=model,
+                prompt=prompt,
+                config=types.GenerateImagesConfig(
+                    number_of_images=1,
+                    aspect_ratio=gen_config.get("aspect_ratio", "1:1")
+                )
+            )
+            for generated_image in response.generated_images:
+                image_bytes = BytesIO(generated_image.image.image_bytes)
+                images.append(image_bytes)
+                logger.info(f"{model}で画像が正常に生成されました")
+
+        if not images:
+            logger.warning(f"{model}での画像生成に失敗しました")
+            if model == "gemini-2.0-flash-exp-image-generation":
+                logger.info("Imagen 3モデルでリトライします")
+                return await _generate_with_model(
+                    "imagen-3.0-generate-002",
+                    prompt,
+                    config,
+                    gen_config
+                )
 
     except Exception as e:
-        logger.error(f"Error generating image: {e}")
+        logger.error(f"{model}での画像生成中にエラーが発生: {e}")
+        if model == "gemini-2.0-flash-exp-image-generation":
+            logger.info("Imagen 3モデルでリトライします")
+            return await _generate_with_model(
+                "imagen-3.0-generate-002",
+                prompt,
+                config,
+                gen_config
+            )
         raise
+
+    return images
 
 async def process_img_with_ollama(img, question, bot_model):
     # 画像をリサイズして最適化
