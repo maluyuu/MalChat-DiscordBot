@@ -130,40 +130,12 @@ async def init_gemini_client(api_key: str):
             http_options=HttpOptions(api_version=GEMINI_API_VERSION)
         )
 
-        # 利用可能なモデルを確認
-        try:
-            models = gemini_state.client.list_models()
-            for model in models:
-                model_name = model.name.split('/')[-1]  # models/prefix を除去
-                gemini_state.available_models.add(model_name)
-                logger.info(f"検出されたモデル: {model_name}")
+        # デフォルトのモデルを設定
+        gemini_state.text_model = TEXT_MODELS[0]
+        gemini_state.image_model = IMAGE_GEN_MODELS[0]
 
-            # テキスト生成モデルの選択
-            for model in TEXT_MODELS:
-                if model in gemini_state.available_models:
-                    gemini_state.text_model = model
-                    logger.info(f"テキスト生成に {model} を使用します")
-                    break
-
-            # 画像生成モデルの選択
-            for model in IMAGE_GEN_MODELS:
-                if model in gemini_state.available_models:
-                    gemini_state.image_model = model
-                    logger.info(f"画像生成に {model} を使用します")
-                    break
-
-            if not gemini_state.text_model:
-                logger.warning("利用可能なテキスト生成モデルが見つかりません")
-            if not gemini_state.image_model:
-                logger.warning("利用可能な画像生成モデルが見つかりません")
-            if not gemini_state.text_model and not gemini_state.image_model:
-                raise ValueError("利用可能なモデルが見つかりません")
-
-        except Exception as e:
-            logger.error(f"モデル一覧の取得中にエラーが発生: {e}")
-            gemini_state.client = None
-            raise ValueError(f"APIクライアントの初期化に失敗しました: {e}")
-
+        logger.info(f"テキスト生成に {gemini_state.text_model} を使用します")
+        logger.info(f"画像生成に {gemini_state.image_model} を使用します")
         logger.info("Gemini APIクライアントの初期化が完了しました")
         
     except Exception as e:
