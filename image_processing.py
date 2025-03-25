@@ -13,7 +13,7 @@ from chat_processing import chat_with_model
 from typing import List, Dict, Optional
 import re
 from google import genai
-from google.genai import types
+from google.genai.types import HttpOptions, GenerateContentConfig
 
 VERSION = '0.3.0'
 
@@ -124,10 +124,10 @@ async def init_gemini_client(api_key: str):
     
     try:
         global gemini_state
-        # APIバージョンを明示的に指定してクライアントを初期化
+        # APIバージョンをHttpOptionsを使用して指定
         gemini_state.client = genai.Client(
             api_key=api_key,
-            api_version=GEMINI_API_VERSION
+            http_options=HttpOptions(api_version=GEMINI_API_VERSION)
         )
 
         # 利用可能なモデルを確認
