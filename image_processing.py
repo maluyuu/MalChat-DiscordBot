@@ -24,15 +24,11 @@ class ImageGenSettings:
     def __init__(self):
         self.aspect_ratio = "1:1"
         self.number_of_images = 1
-        self.safety_filter_level = "BLOCK_MEDIUM_AND_ABOVE"
-        self.person_generation = "ALLOW_ADULT"
 
     def to_dict(self) -> Dict:
         return {
             "aspect_ratio": self.aspect_ratio,
-            "number_of_images": self.number_of_images,
-            "safety_filter_level": self.safety_filter_level,
-            "person_generation": self.person_generation
+            "number_of_images": self.number_of_images
         }
 
 class ImageGenTrigger:
@@ -252,10 +248,11 @@ async def _generate_with_model(model: str, prompt: str, content_config: Generate
         response = gemini_state.client.models.generate_content(
             model=model,
             contents={"parts": [{"text": prompt}]},
-            safety_settings=[{
-                "category": "HARM_CATEGORY_HARASSMENT",
-                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-            }]
+            config=GenerateContentConfig(
+                response_modalities=['Text', 'Image'],
+                temperature=0.9,
+                candidate_count=1
+            )
         )
 
         # レスポンスのバリデーション
@@ -263,6 +260,7 @@ async def _generate_with_model(model: str, prompt: str, content_config: Generate
             logger.error(f"{model}での画像生成でレスポンスが不正でした")
             raise ValueError("画像生成のレスポンスが不正です")
         
+        # 画像データの抽出
         if response.candidates:
             for part in response.candidates[0].content.parts:
                 if part.inline_data and part.inline_data.mime_type.startswith('image/'):
@@ -276,15 +274,16 @@ async def _generate_with_model(model: str, prompt: str, content_config: Generate
                 elif part.text:
                     logger.info(f"テキストパート: {part.text}")
 
+        # 生成結果の確認
         if not images:
             logger.warning(f"{model}での画像生成に失敗しました")
             raise ValueError("画像生成に失敗しました")
 
-    except Exception as e:
-        logger.error(f"{model}での画像生成中にエラーが発生: {e}")
-        raise
+        return images
 
-    return images
+    except Exception as error:
+        logger.error(f"{model}での画像生成中にエラーが発生: {error}")
+        raise
 
 async def process_img_with_ollama(img, question, bot_model):
     # 画像をリサイズして最適化
