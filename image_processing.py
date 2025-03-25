@@ -79,8 +79,8 @@ GEMINI_API_VERSION = "v1"  # APIバージョンを明示的に指定
 
 # 利用可能なモデルの定義
 TEXT_MODELS = [
-    "gemini-1.0-pro",  # 優先的に使用
-    "gemini-pro"       # フォールバック
+    "gemini-2.0-flash-lite",  # 優先的に使用
+    "gemini-2.0-flash"       # フォールバック
 ]
 
 IMAGE_GEN_MODELS = [
@@ -215,14 +215,18 @@ async def generate_image_with_gemini(prompt: str, config: Optional[Dict] = None)
         optimized_prompt = await optimize_prompt(prompt)
         logger.info(f"最適化されたプロンプト: {optimized_prompt}")
 
-        # 生成設定
+        # 生成設定（最新のAPI仕様に準拠）
         generate_content_config = GenerateContentConfig(
-            response_modalities=["Text", "Image"],
-            aspect_ratio=gen_config.get("aspect_ratio", "1:1"),
-            number_of_images=gen_config.get("number_of_images", 1)
+            response_modalities=["Text", "Image"]
         )
 
-        # 画像生成の実行（優先的に使用するモデルから開始）
+        # 必要な設定をパラメータとして渡す
+        generation_params = {
+            "temperature": 0.9,  # クリエイティビティのレベル
+            "candidate_count": 1,  # 生成する候補の数
+        }
+
+        # 画像生成の実行
         model = gemini_state.get_image_model()
         return await _generate_with_model(
             model,
@@ -238,17 +242,29 @@ async def generate_image_with_gemini(prompt: str, config: Optional[Dict] = None)
         logger.error(f"予期せぬエラーが発生しました: {e}")
         raise
 
-async def _generate_with_model(model: str, prompt: str, config: GenerateContentConfig, gen_config: Dict) -> List[BytesIO]:
+async def _generate_with_model(model: str, prompt: str, content_config: GenerateContentConfig, gen_config: Dict) -> List[BytesIO]:
     """
     指定されたモデルを使用して画像を生成する内部メソッド
     """
     images = []
     try:
+        # 生成パラメータの設定
+        generation_params = {
+            "temperature": 0.9,
+            "candidate_count": 1
+        }
+
         response = gemini_state.client.models.generate_content(
             model=model,
             contents=prompt,
-            config=config
+            config=content_config,
+            generation_config=generation_params
         )
+
+        # レスポンスのバリデーション
+        if not response or not hasattr(response, 'candidates') or not response.candidates:
+            logger.error(f"{model}での画像生成でレスポンスが不正でした")
+            raise ValueError("画像生成のレスポンスが不正です")
         
         if response.candidates:
             for part in response.candidates[0].content.parts:
