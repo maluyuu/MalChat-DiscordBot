@@ -244,7 +244,7 @@ async def generate_image_with_gemini(prompt: str, config: Optional[Dict] = None)
         logger.info(f"最適化されたプロンプト: {optimized_prompt}")
 
         # 生成設定
-        generate_content_config = types.GenerateContentConfig(
+        generate_content_config = GenerateContentConfig(
             response_modalities=["Text", "Image"],
             aspect_ratio=gen_config.get("aspect_ratio", "1:1"),
             number_of_images=gen_config.get("number_of_images", 1)
@@ -266,7 +266,7 @@ async def generate_image_with_gemini(prompt: str, config: Optional[Dict] = None)
         logger.error(f"予期せぬエラーが発生しました: {e}")
         raise
 
-async def _generate_with_model(model: str, prompt: str, config: types.GenerateContentConfig, gen_config: Dict) -> List[BytesIO]:
+async def _generate_with_model(model: str, prompt: str, config: GenerateContentConfig, gen_config: Dict) -> List[BytesIO]:
     """
     指定されたモデルを使用して画像を生成する内部メソッド
     """
