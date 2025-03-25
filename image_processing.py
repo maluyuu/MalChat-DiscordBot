@@ -84,8 +84,7 @@ TEXT_MODELS = [
 ]
 
 IMAGE_GEN_MODELS = [
-    "gemini-2.0-flash-exp-image-generation",  # 優先的に使用
-    "imagen-3.0-generate-002"                 # フォールバック
+    "gemini-2.0-flash-exp-image-generation"  # 画像生成に使用するモデル
 ]
 
 # クライアントとモデルの状態
@@ -273,61 +272,31 @@ async def _generate_with_model(model: str, prompt: str, config: types.GenerateCo
     """
     images = []
     try:
-        if model == "gemini-2.0-flash-exp-image-generation":
-            response = gemini_state.client.models.generate_content(
-                model=model,
-                contents=prompt,
-                config=config
-            )
-            
-            if response.candidates:
-                for part in response.candidates[0].content.parts:
-                    if part.inline_data and part.inline_data.mime_type.startswith('image/'):
-                        image_data = part.inline_data.data
-                        image = Image.open(BytesIO(image_data))
-                        image_bytes = BytesIO()
-                        image.save(image_bytes, format='PNG')
-                        image_bytes.seek(0)
-                        images.append(image_bytes)
-                        logger.info(f"{model}で画像が正常に生成されました")
-                    elif part.text:
-                        logger.info(f"テキストパート: {part.text}")
-
-        elif model == "imagen-3.0-generate-002":
-            response = gemini_state.client.models.generate_images(
-                model=model,
-                prompt=prompt,
-                config=types.GenerateImagesConfig(
-                    number_of_images=1,
-                    aspect_ratio=gen_config.get("aspect_ratio", "1:1")
-                )
-            )
-            for generated_image in response.generated_images:
-                image_bytes = BytesIO(generated_image.image.image_bytes)
-                images.append(image_bytes)
-                logger.info(f"{model}で画像が正常に生成されました")
+        response = gemini_state.client.models.generate_content(
+            model=model,
+            contents=prompt,
+            config=config
+        )
+        
+        if response.candidates:
+            for part in response.candidates[0].content.parts:
+                if part.inline_data and part.inline_data.mime_type.startswith('image/'):
+                    image_data = part.inline_data.data
+                    image = Image.open(BytesIO(image_data))
+                    image_bytes = BytesIO()
+                    image.save(image_bytes, format='PNG')
+                    image_bytes.seek(0)
+                    images.append(image_bytes)
+                    logger.info(f"{model}で画像が正常に生成されました")
+                elif part.text:
+                    logger.info(f"テキストパート: {part.text}")
 
         if not images:
             logger.warning(f"{model}での画像生成に失敗しました")
-            if model == "gemini-2.0-flash-exp-image-generation":
-                logger.info("Imagen 3モデルでリトライします")
-                return await _generate_with_model(
-                    "imagen-3.0-generate-002",
-                    prompt,
-                    config,
-                    gen_config
-                )
+            raise ValueError("画像生成に失敗しました")
 
     except Exception as e:
         logger.error(f"{model}での画像生成中にエラーが発生: {e}")
-        if model == "gemini-2.0-flash-exp-image-generation":
-            logger.info("Imagen 3モデルでリトライします")
-            return await _generate_with_model(
-                "imagen-3.0-generate-002",
-                prompt,
-                config,
-                gen_config
-            )
         raise
 
     return images
