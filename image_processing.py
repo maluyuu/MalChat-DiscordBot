@@ -248,15 +248,14 @@ async def _generate_with_model(model: str, prompt: str, content_config: Generate
     """
     images = []
     try:
-        # 生成設定を設定
-        config = GenerateContentConfig()
-
+        # 生成設定
         response = gemini_state.client.models.generate_content(
             model=model,
-            contents=prompt,
-            temperature=0.9,
-            candidate_count=1,
-            max_output_tokens=2048
+            contents={"parts": [{"text": prompt}]},
+            safety_settings=[{
+                "category": "HARM_CATEGORY_HARASSMENT",
+                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+            }]
         )
 
         # レスポンスのバリデーション
