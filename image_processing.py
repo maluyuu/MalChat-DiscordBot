@@ -248,17 +248,15 @@ async def _generate_with_model(model: str, prompt: str, content_config: Generate
     """
     images = []
     try:
-        # 生成設定の準備
-        generation_config = {
-            "temperature": 0.9,
-            "candidate_count": 1,
-            "max_output_tokens": 2048
-        }
+        # 生成設定を設定
+        config = GenerateContentConfig()
 
         response = gemini_state.client.models.generate_content(
             model=model,
             contents=prompt,
-            generation_config=generation_config
+            temperature=0.9,
+            candidate_count=1,
+            max_output_tokens=2048
         )
 
         # レスポンスのバリデーション
