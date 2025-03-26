@@ -13,17 +13,16 @@ def convert_model_name(model: str) -> str:
     """
     model_mapping = {
         # Gemini 2.0 models
-        'gemini-2.0-flash': 'gemini-2.0-flash-exp',  # 実験的モデル
-        'gemini-2.0-flash-thinking': 'gemini-2.0-flash-thinking-exp',  # 思考プロセス実験モデル
-        'gemini-2.0-flash-lite': 'gemini-2.0-flash-lite-exp',  # 軽量実験モデル
+        'gemini-2.0-flash': 'gemini-2.0-flash-001',  # 標準モデル
+        'gemini-2.0-flash-thinking': 'gemini-2.0-flash-thinking-exp-01-21',  # 思考プロセス実験モデル
+        'gemini-2.0-flash-lite': 'gemini-2.0-flash-lite',  # 軽量実験モデル
         'gemini-2.0-pro': 'gemini-2.0-pro-exp',  # Pro実験モデル
+        # Gemini 2.5 models
+        'gemini-2.5-pro': 'gemini-2.5-pro-exp-03-25',  # 実験的モデル
         # Gemini 1.5 models
         'gemini-1.5-flash': 'gemini-1.5-flash',  # 標準モデル
         'gemini-1.5-pro': 'gemini-1.5-pro',  # Proモデル
         'gemini-1.5-flash-8b': 'gemini-1.5-flash-8b',  # 8Bモデル
-        # Gemini 1.0 models (Deprecated)
-        'gemini-1.0-pro': 'gemini-1.0-pro',  # 非推奨モデル
-        'gemini-1.0-pro-vision': 'gemini-1.0-pro-vision',  # 非推奨Visionモデル
     }
     return model_mapping.get(model, model)
 
