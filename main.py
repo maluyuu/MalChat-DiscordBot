@@ -36,9 +36,9 @@ chanID_env = os.getenv('CHAN_ID')
 chanID = [int(x) for x in chanID_env.split(',')] if chanID_env else []
 
 # グローバル変数の定義
-VERSION = '1.00'
+VERSION = '1.10'
 BOT_NAME = 'MalChat'
-BOT_MODEL = 'gemini-2.0-flash'
+BOT_MODEL = 'gemini-2.0-flash-lite'
 TOKEN = os.getenv('DISCORD_TOKEN')
 
 intents = discord.Intents.default()
@@ -208,17 +208,8 @@ async def on_message(message):
                         'gemini-2.0-pro (最高品質のモデル)',
                         'gemini-2.0-flash-lite (コスト効率の良いモデル)',
                         'gemini-2.0-flash-thinking (思考プロセスを含む推論モデル)',
-                        '=== Ollama Models ===',
-                        'gemma2',
-                        'gemma2JP',
-                        'gemma3',
-                        'llama3.1',
-                        'llama3.2',
-                        'deepseek-r1',
-                        'deepseek-r1:14b',
-                        'deepseek-r1JP',
-                        'phi4',
-                        'tinySwallow'
+                        '=== Gemini 2.5 ===',
+                        'gemini-2.5-pro (実験的なモデル)'
                     ]
                     model_list_str = '\n'.join(model_list)
                     await message.reply(f'利用可能なモデル:\n```{model_list_str}```', mention_author=False)
@@ -233,7 +224,7 @@ async def on_message(message):
 
         if message.content.startswith('!malRoboKasu'):
             channel_id = message.channel.id
-            await chat_history_manager.write_log_file(message.author.name, message.content, channel_id=channel_id)
+            await chat_history_manager.write_log_file(message.authoa.namee.author.name, message.content, channel_id=channel_id)
             question = message.content.replace('!malRoboKasu', '').strip()
             await message.channel.typing()
             response = await chat_with_model(get_bot_model(), messages=[
