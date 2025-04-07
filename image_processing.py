@@ -12,8 +12,8 @@ from utils.logger import setup_logger
 from chat_processing import chat_with_model
 from typing import List, Dict, Optional
 import re
-from google import genai
-from google.genai.types import HttpOptions, GenerateContentConfig
+import google.generativeai as genai
+from google.generativeai.types import GenerateContentResponse, HttpOptions, GenerateContentConfig
 
 VERSION = '0.3.0'
 
