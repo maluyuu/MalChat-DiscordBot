@@ -13,8 +13,7 @@ from chat_processing import chat_with_model
 from typing import List, Dict, Optional
 import re
 import google.generativeai as genai
-from google.generativeai.types import GenerateContentResponse
-from google.generativeai import GenerationConfig
+from google.generativeai.types import GenerateContentResponse, GenerateContentConfig
 
 VERSION = '0.3.0'
 
@@ -213,19 +212,22 @@ async def generate_image_with_gemini(prompt: str, config: Optional[Dict] = None)
         logger.info(f"最適化されたプロンプト: {optimized_prompt}")
 
         # 生成設定（最新のAPI仕様に準拠）
-        generation_config = GenerationConfig(
-            temperature=0.9,  # クリエイティビティのレベル
-            candidate_count=1,  # 生成する候補の数
-            stop_sequences=[],  # 停止シーケンス
-            max_output_tokens=2048,  # 最大出力トークン数
+        generate_content_config = GenerateContentConfig(
+            response_modalities=["Text", "Image"]
         )
+
+        # 必要な設定をパラメータとして渡す
+        generation_params = {
+            "temperature": 0.9,  # クリエイティビティのレベル
+            "candidate_count": 1,  # 生成する候補の数
+        }
 
         # 画像生成の実行
         model = gemini_state.get_image_model()
         return await _generate_with_model(
             model,
             optimized_prompt,
-            generation_config,
+            generate_content_config,
             gen_config
         )
 
@@ -236,7 +238,7 @@ async def generate_image_with_gemini(prompt: str, config: Optional[Dict] = None)
         logger.error(f"予期せぬエラーが発生しました: {e}")
         raise
 
-async def _generate_with_model(model: str, prompt: str, generation_config: GenerationConfig, gen_config: Dict) -> List[BytesIO]:
+async def _generate_with_model(model: str, prompt: str, content_config: GenerateContentConfig, gen_config: Dict) -> List[BytesIO]:
     """
     指定されたモデルを使用して画像を生成する内部メソッド
     """
@@ -246,7 +248,11 @@ async def _generate_with_model(model: str, prompt: str, generation_config: Gener
         response = gemini_state.client.models.generate_content(
             model=model,
             contents={"parts": [{"text": prompt}]},
-            generation_config=generation_config
+            config=GenerateContentConfig(
+                response_modalities=['Text', 'Image'],
+                temperature=0.9,
+                candidate_count=1
+            )
         )
 
         # レスポンスのバリデーション
