@@ -19,24 +19,28 @@ async def analyze_audio_request(request: str, model: str) -> dict:
             JSONのみを出力し、その他の説明は不要です。
 
             抽出するパラメータ：
-            - format: 出力フォーマット（wav/mp3/flac/ogg/m4a-aac/m4a-alac）
+            - format: 出力フォーマット（wav/mp3/flac/ogg/m4a-aac/m4a-alac）必須
             - bit_depth: ビット深度（16bit/24bit/32bit float）
             - sample_rate: サンプルレート（Hz）
+            - bitrate: ビットレート（mp3形式のみ、kbps）
 
-            デフォルト値（パラメータが明示されていない場合）：
-            - format: パラメータ必須
+            デフォルト値：
             - bit_depth: "16bit"
             - sample_rate: 44100
+            - bitrate: mp3の場合は192（kbps）
 
             変換要求の例と対応するJSON：
-            「このファイルをwavに変換して」
-            {{"format": "wav", "bit_depth": "16bit", "sample_rate": 44100}}
+            「このファイルをmp3にして」
+            {{"format": "mp3", "bit_depth": "16bit", "sample_rate": 44100, "bitrate": 192}}
 
             「320kbpsのmp3にして」
-            {{"format": "mp3", "bit_depth": "16bit", "sample_rate": 44100}}
+            {{"format": "mp3", "bit_depth": "16bit", "sample_rate": 44100, "bitrate": 320}}
 
             「48kHz 24bitのflacファイルにして」
             {{"format": "flac", "bit_depth": "24bit", "sample_rate": 48000}}
+
+            「wavに変換」
+            {{"format": "wav", "bit_depth": "16bit", "sample_rate": 44100}}
             
             リクエスト: {request}
             '''
@@ -55,13 +59,34 @@ def validate_conversion_params(params: dict) -> bool:
     valid_formats = ['mp3', 'wav', 'flac', 'ogg', 'm4a-aac', 'm4a-alac']
     valid_bit_depths = ['16bit', '24bit', '32bit float']
     valid_sample_rates = [8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 192000]
+    valid_bitrates = [96, 128, 160, 192, 256, 320]  # MP3のビットレート（kbps）
 
-    if not all(key in params for key in ['format', 'bit_depth', 'sample_rate']):
+    # 必須パラメータのチェック
+    if 'format' not in params:
+        return False
+
+    # デフォルト値の設定
+    if 'bit_depth' not in params:
+        params['bit_depth'] = '16bit'
+    if 'sample_rate' not in params:
+        params['sample_rate'] = 44100
+    if params['format'] == 'mp3' and 'bitrate' not in params:
+        params['bitrate'] = 192
+
+    # パラメータの検証
+    if params['format'] not in valid_formats:
+        return False
+    if params['bit_depth'] not in valid_bit_depths:
+        return False
+    if params['sample_rate'] not in valid_sample_rates:
         return False
     
-    return (params['format'] in valid_formats and
-            params['bit_depth'] in valid_bit_depths and
-            params['sample_rate'] in valid_sample_rates)
+    # MP3の場合はビットレートも検証
+    if params['format'] == 'mp3' and 'bitrate' in params:
+        if params['bitrate'] not in valid_bitrates:
+            return False
+
+    return True
 
 async def is_audio_conversion_request(content: str, model: str) -> bool:
     """
@@ -92,6 +117,14 @@ async def is_audio_conversion_request(content: str, model: str) -> bool:
     return 'true' in response.lower()
 
 async def convert_audio_file(input_path: str, params: dict, progress_callback=None) -> str:
+    """
+    音声ファイルを変換
+    params:
+        - format: 出力フォーマット（必須）
+        - bit_depth: ビット深度（デフォルト: 16bit）
+        - sample_rate: サンプルレート（デフォルト: 44100）
+        - bitrate: ビットレート（MP3形式のみ、デフォルト: 192）
+    """
     """
     音声ファイルを変換
     """

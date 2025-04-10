@@ -140,23 +140,27 @@ async def process_attachments(message, question: str) -> tuple[Optional[str], Op
                                 params,
                                 progress_callback=progress_callback
                             )
-                            # 変換後のファイルを送信
-                            await message.reply(file=discord.File(converted_file_path), mention_author=False)
-                            # 一時ファイルを削除
-                            os.remove(temp_file_path)
-                            os.remove(converted_file_path)
-                            return combined_context, current_files
+                            try:
+                                # 変換後のファイルを送信
+                                await message.reply('変換が完了しました。ファイルをアップロードします。', mention_author=False)
+                                await message.reply(file=discord.File(converted_file_path), mention_author=False)
+                            finally:
+                                # 一時ファイルを削除
+                                if os.path.exists(temp_file_path):
+                                    os.remove(temp_file_path)
+                                if os.path.exists(converted_file_path):
+                                    os.remove(converted_file_path)
                         else:
-                            await message.reply('指定された変換パラメータが無効です。', mention_author=False)
+                            await message.reply('指定された変換パラメータが無効です。サポートされている形式：wav, mp3, flac, ogg, m4a', mention_author=False)
                     else:
-                        await message.reply('音声ファイルの変換リクエストとして認識できませんでした。', mention_author=False)
+                        await message.reply('音声ファイルの変換方法を指定してください。例：「mp3に変換」「48kHz wavに変換」「320kbpsのmp3に変換」', mention_author=False)
                 except Exception as e:
                     await message.reply(f'音声ファイルの処理中にエラーが発生しました: {str(e)}', mention_author=False)
                     if os.path.exists(temp_file_path):
                         os.remove(temp_file_path)
                     logger.error(f"Error processing audio file {attachment.filename}: {e}")
             else:
-                await message.reply('音声ファイルの処理方法を指定してください。', mention_author=False)
+                await message.reply('音声ファイルをアップロードしました。変換方法を指定してください。例：「mp3に変換」「48kHz wavに変換」「320kbpsのmp3に変換」', mention_author=False)
                 if os.path.exists(temp_file_path):
                     os.remove(temp_file_path)
 
@@ -220,7 +224,7 @@ async def on_message(message):
                 await message.reply(system_info, mention_author=False)
                 return
             elif commands == 'about':
-                system_info = f'```\nName : {BOT_NAME}\nVersionInfo\nBot : {VERSION}\nSystem : {await system.version()}\nLogging Module : {await rag_log_processing.version()}\nImage Module: {await image_processing.version()}\nPDF Module : {await pdf_processing.version()}\nWeb Module : {await web_processing.version()}\nModel : {get_bot_model()}\n```'
+                system_info = f'```\nName : {BOT_NAME}\nVersionInfo\nBot : {VERSION}\nSystem : {await system.version()}\nLogging Module : {await rag_log_processing.version()}\nImage Module: {await image_processing.version()}\nPDF Module : {await pdf_processing.version()}\nWeb Module : {await web_processing.version()}\nAudio Module: {audio_processing.VERSION}\nModel : {get_bot_model()}\n```'
                 await message.reply(system_info, mention_author=False)
             elif commands.startswith('model'):
                 model_name = commands.replace('model', '').strip()
