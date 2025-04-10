@@ -16,16 +16,27 @@ async def analyze_audio_request(request: str, model: str) -> dict:
             'role': 'user',
             'content': f'''
             以下の音声変換リクエストから必要なパラメータを抽出してJSON形式で出力してください。
-            その他の説明は不要です。JSONのみを出力してください。
+            JSONのみを出力し、その他の説明は不要です。
 
-            パラメータ：
+            抽出するパラメータ：
             - format: 出力フォーマット（wav/mp3/flac/ogg/m4a-aac/m4a-alac）
             - bit_depth: ビット深度（16bit/24bit/32bit float）
             - sample_rate: サンプルレート（Hz）
-            
-            例：
-            「このファイルを16bit 48khzのwavファイルにして」
-            {{"format": "wav", "bit_depth": "16bit", "sample_rate": 48000}}
+
+            デフォルト値（パラメータが明示されていない場合）：
+            - format: パラメータ必須
+            - bit_depth: "16bit"
+            - sample_rate: 44100
+
+            変換要求の例と対応するJSON：
+            「このファイルをwavに変換して」
+            {{"format": "wav", "bit_depth": "16bit", "sample_rate": 44100}}
+
+            「320kbpsのmp3にして」
+            {{"format": "mp3", "bit_depth": "16bit", "sample_rate": 44100}}
+
+            「48kHz 24bitのflacファイルにして」
+            {{"format": "flac", "bit_depth": "24bit", "sample_rate": 48000}}
             
             リクエスト: {request}
             '''
@@ -60,8 +71,17 @@ async def is_audio_conversion_request(content: str, model: str) -> bool:
         {
             'role': 'user',
             'content': f'''
-            以下のメッセージは音声ファイルの変換要求ですか？
-            変換要求の場合はtrue、それ以外の場合はfalseで答えてください。
+            以下のメッセージは音声ファイルの変換要求かどうかを判定してください。
+
+            変換要求の例：
+            - このファイルをmp3にして
+            - wavファイルに変換して
+            - 48kHzに変換
+            - 320kbpsのmp3にして
+            - m4aに変換
+            - この音声を16bitにして
+            
+            変換要求の場合はtrueのみを、それ以外の場合はfalseのみを出力してください。
             その他の説明は不要です。
 
             メッセージ: {content}
