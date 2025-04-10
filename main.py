@@ -26,6 +26,7 @@ from utils.logger import setup_logger
 from chat_processing import chat_with_model
 import asyncio
 import random  # 確率応答のために追加
+import json
 
 # 環境変数の読み込み
 load_dotenv() #不要なコミットを追加
@@ -125,40 +126,58 @@ async def process_attachments(message, question: str) -> tuple[Optional[str], Op
                 try:
                     # 音声変換のリクエストかどうかを確認
                     is_conversion = await audio_processing.is_audio_conversion_request(question, get_bot_model())
+                    logger.debug(f"Audio conversion request check: {is_conversion} for message: {question}")
+                    
                     if is_conversion:
                         # 変換パラメータを解析
                         params = await audio_processing.analyze_audio_request(question, get_bot_model())
+                        logger.debug(f"Parsed audio parameters: {params}")
+
                         if audio_processing.validate_conversion_params(params):
+                            logger.info(f"Starting audio conversion for {attachment.filename} with params: {params}")
                             # 変換の進捗を通知する関数
                             async def progress_callback(progress):
                                 if progress % 25 == 0:  # 25%ごとに進捗を通知
                                     await message.channel.send(f'変換進捗: {progress}%')
 
                             # 音声ファイルを変換
-                            converted_file_path = await audio_processing.convert_audio_file(
-                                temp_file_path,
-                                params,
-                                progress_callback=progress_callback
-                            )
+                            converted_file_path = None
                             try:
+                                converted_file_path = await audio_processing.convert_audio_file(
+                                    temp_file_path,
+                                    params,
+                                    progress_callback=progress_callback
+                                )
                                 # 変換後のファイルを送信
                                 await message.reply('変換が完了しました。ファイルをアップロードします。', mention_author=False)
                                 await message.reply(file=discord.File(converted_file_path), mention_author=False)
+                            except Exception as e:
+                                error_msg = f'変換処理中にエラーが発生しました: {str(e)}'
+                                logger.error(f"Conversion error for {attachment.filename}: {e}", exc_info=True)
+                                await message.reply(error_msg, mention_author=False)
+                                raise
                             finally:
                                 # 一時ファイルを削除
                                 if os.path.exists(temp_file_path):
                                     os.remove(temp_file_path)
-                                if os.path.exists(converted_file_path):
+                                if converted_file_path and os.path.exists(converted_file_path):
                                     os.remove(converted_file_path)
                         else:
                             await message.reply('指定された変換パラメータが無効です。サポートされている形式：wav, mp3, flac, ogg, m4a', mention_author=False)
                     else:
                         await message.reply('音声ファイルの変換方法を指定してください。例：「mp3に変換」「48kHz wavに変換」「320kbpsのmp3に変換」', mention_author=False)
+                except json.JSONDecodeError as e:
+                    error_msg = f'音声変換パラメータの解析に失敗しました。詳細: {str(e)}'
+                    logger.error(f"JSON parse error for {attachment.filename}: {e}")
+                    await message.reply(error_msg, mention_author=False)
+                except ValueError as e:
+                    error_msg = f'パラメータが無効です: {str(e)}'
+                    logger.error(f"Invalid parameters for {attachment.filename}: {e}")
+                    await message.reply(error_msg, mention_author=False)
                 except Exception as e:
-                    await message.reply(f'音声ファイルの処理中にエラーが発生しました: {str(e)}', mention_author=False)
-                    if os.path.exists(temp_file_path):
-                        os.remove(temp_file_path)
-                    logger.error(f"Error processing audio file {attachment.filename}: {e}")
+                    error_msg = f'音声ファイルの処理中にエラーが発生しました: {str(e)}'
+                    logger.error(f"Error processing audio file {attachment.filename}: {e}", exc_info=True)
+                    await message.reply(error_msg, mention_author=False)
             else:
                 await message.reply('音声ファイルをアップロードしました。変換方法を指定してください。例：「mp3に変換」「48kHz wavに変換」「320kbpsのmp3に変換」', mention_author=False)
                 if os.path.exists(temp_file_path):

@@ -2,10 +2,15 @@ import json
 import asyncio
 import tempfile
 import os
+import logging
 from convertEngine import AudioConverter
 from chat_processing import chat_with_model
+from utils.logger import setup_logger
 
 VERSION = '0.0.1'
+
+# ロギングの設定
+logger = setup_logger(__name__, 'audio_processing.log')
 
 async def analyze_audio_request(request: str, model: str) -> dict:
     """
@@ -47,10 +52,14 @@ async def analyze_audio_request(request: str, model: str) -> dict:
         }
     ]
     response = await chat_with_model(model, messages)
+    logger.debug(f"analyze_audio_request raw response: {response}")
     try:
-        return json.loads(response)
-    except json.JSONDecodeError:
-        raise ValueError("変換パラメータの解析に失敗しました。")
+        parsed = json.loads(response)
+        logger.info(f"Parsed parameters: {parsed}")
+        return parsed
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON parse error: {str(e)}\nRaw response: {response}")
+        raise ValueError(f"変換パラメータの解析に失敗しました。応答: {response}")
 
 def validate_conversion_params(params: dict) -> bool:
     """
@@ -114,9 +123,13 @@ async def is_audio_conversion_request(content: str, model: str) -> bool:
         }
     ]
     response = await chat_with_model(model, messages)
-    return 'true' in response.lower()
+    logger.debug(f"is_audio_conversion_request response: {response}")
+    result = 'true' in response.lower()
+    logger.info(f"Audio conversion request detection: {result}")
+    return result
 
 async def convert_audio_file(input_path: str, params: dict, progress_callback=None) -> str:
+    logger.info(f"Starting audio conversion with parameters: {params}")
     """
     音声ファイルを変換
     params:
