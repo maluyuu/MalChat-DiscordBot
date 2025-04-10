@@ -53,12 +53,17 @@ async def analyze_audio_request(request: str, model: str) -> dict:
     ]
     response = await chat_with_model(model, messages)
     logger.debug(f"analyze_audio_request raw response: {response}")
+    
     try:
-        parsed = json.loads(response)
+        # マークダウンのJSON記法を除去
+        clean_response = response.replace('```json\n', '').replace('\n```', '').strip()
+        logger.debug(f"Cleaned response for parsing: {clean_response}")
+        
+        parsed = json.loads(clean_response)
         logger.info(f"Parsed parameters: {parsed}")
         return parsed
     except json.JSONDecodeError as e:
-        logger.error(f"JSON parse error: {str(e)}\nRaw response: {response}")
+        logger.error(f"JSON parse error: {str(e)}\nRaw response: {response}\nCleaned response: {clean_response}")
         raise ValueError(f"変換パラメータの解析に失敗しました。応答: {response}")
 
 def validate_conversion_params(params: dict) -> bool:
