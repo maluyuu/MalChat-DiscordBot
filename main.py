@@ -15,6 +15,7 @@ import pdf_processing
 import web_processing
 import rag_log_processing
 import system
+import audio_processing
 import logging
 from logging.handlers import RotatingFileHandler
 from rag_log_processing import chat_history_manager
@@ -115,7 +116,51 @@ async def process_attachments(message, question: str) -> tuple[Optional[str], Op
     current_files = []
 
     for attachment in message.attachments:
-        if attachment.filename.endswith('.pdf'):
+        if attachment.filename.endswith(('.mp3', '.wav', '.flac', '.ogg', '.m4a')):
+            await message.reply(f'音声ファイルがアップロードされました: {attachment.filename}\n音声ファイルの処理を開始します。', mention_author=False)
+            temp_file_path = f'temp_{attachment.filename}'
+            await attachment.save(temp_file_path)
+
+            if question:
+                try:
+                    # 音声変換のリクエストかどうかを確認
+                    is_conversion = await audio_processing.is_audio_conversion_request(question, get_bot_model())
+                    if is_conversion:
+                        # 変換パラメータを解析
+                        params = await audio_processing.analyze_audio_request(question, get_bot_model())
+                        if audio_processing.validate_conversion_params(params):
+                            # 変換の進捗を通知する関数
+                            async def progress_callback(progress):
+                                if progress % 25 == 0:  # 25%ごとに進捗を通知
+                                    await message.channel.send(f'変換進捗: {progress}%')
+
+                            # 音声ファイルを変換
+                            converted_file_path = await audio_processing.convert_audio_file(
+                                temp_file_path,
+                                params,
+                                progress_callback=progress_callback
+                            )
+                            # 変換後のファイルを送信
+                            await message.reply(file=discord.File(converted_file_path), mention_author=False)
+                            # 一時ファイルを削除
+                            os.remove(temp_file_path)
+                            os.remove(converted_file_path)
+                            return combined_context, current_files
+                        else:
+                            await message.reply('指定された変換パラメータが無効です。', mention_author=False)
+                    else:
+                        await message.reply('音声ファイルの変換リクエストとして認識できませんでした。', mention_author=False)
+                except Exception as e:
+                    await message.reply(f'音声ファイルの処理中にエラーが発生しました: {str(e)}', mention_author=False)
+                    if os.path.exists(temp_file_path):
+                        os.remove(temp_file_path)
+                    logger.error(f"Error processing audio file {attachment.filename}: {e}")
+            else:
+                await message.reply('音声ファイルの処理方法を指定してください。', mention_author=False)
+                if os.path.exists(temp_file_path):
+                    os.remove(temp_file_path)
+
+        elif attachment.filename.endswith('.pdf'):
             await message.reply(f'PDFファイルがアップロードされました: {attachment.filename}\nPDFファイルの解析を開始します。', mention_author=False)
             try:
                 pdf_text = await pdf_processing.get_pdfText(attachment)
