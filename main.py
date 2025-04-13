@@ -382,7 +382,7 @@ async def on_message(message):
                         needs_response = True
                 elif bot.user.mentioned_in(message): # botにメンションがあった場合
                     needs_response = True
-                elif random.random() < 0.05:
+                elif random.random() < 0.00:
                     needs_response = True
                     is_random_response = True
 
