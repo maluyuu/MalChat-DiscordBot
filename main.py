@@ -148,8 +148,48 @@ async def process_attachments(message, question: str) -> tuple[Optional[str], Op
                                     params,
                                     progress_callback=progress_callback
                                 )
+                                # 変換情報の生成
+                                conversion_context = f"""
+音声変換処理の詳細:
+- 入力ファイル: {attachment.filename}
+- 変換パラメータ:
+  - 出力形式: {params['format']}
+  - ビット深度: {params['bit_depth']}
+  - サンプルレート: {params['sample_rate']}Hz
+{f"  - ビットレート: {params['bitrate']}kbps" if 'bitrate' in params else ''}
+- 変換結果: 正常に完了
+- 出力ファイル: {os.path.basename(converted_file_path)}
+"""
+                                # 文脈に変換情報を追加
+                                context.append(conversion_context)
+
+                                # チャット履歴に変換情報を追加
+                                await chat_history_manager.add_entry(
+                                    role='system',
+                                    content=f'音声変換機能: {conversion_context}',
+                                    channel_id=message.channel.id
+                                )
+
+                                # 変換成功のメッセージ生成
+                                response = await chat_with_model(get_bot_model(), messages=[
+                                    {
+                                        'role': 'system',
+                                        'content': '音声変換処理を実行中です。このファイルに対する変換操作の結果を報告してください。'
+                                    },
+                                    {
+                                        'role': 'user',
+                                        'content': f'''
+現在の音声変換処理が完了しました:
+{conversion_context}
+
+変換の結果を報告してください。技術的なパラメータについても言及してください。
+'''
+                                    }
+                                ])
+                                bot_response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
+                                
                                 # 変換後のファイルを送信
-                                await message.reply('変換が完了しました。ファイルをアップロードします。', mention_author=False)
+                                await message.reply(bot_response, mention_author=False)
                                 await message.reply(file=discord.File(converted_file_path), mention_author=False)
                             except Exception as e:
                                 error_msg = f'変換処理中にエラーが発生しました: {str(e)}'
@@ -375,6 +415,9 @@ async def on_message(message):
                 system_prompt = (
                     f'あなたの名前は{BOT_NAME}で、maluyuuによって開発されたDiscord botです。\n'
                     f'現在の時刻は: {dt_now}\n'
+                    f'あなたは以下の機能を持っています：\n'
+                    f'- 音声ファイルの形式変換（MP3, WAV, FLAC, OGG, M4A対応）\n'
+                    f'- ビットレート、サンプルレート、ビット深度の調整\n'
                     f'以下の情報を考慮して回答してください:\n'
                 )
 
@@ -389,18 +432,34 @@ async def on_message(message):
 
                 # 結合した履歴をメッセージリストに追加
                 if relevant_history:  # Noneでない場合のみ処理
-                    for entry in relevant_history:
-                        if entry and isinstance(entry, dict):  # エントリーが有効な辞書の場合のみ追加
-                            messages.append({
-                                'role': entry.get('role', 'user'),
-                                'content': entry.get('content', '')
-                            })
+                    # 最新の履歴エントリを確認
+                    latest_entry = relevant_history[-1] if relevant_history else None
+                    if latest_entry and 'role' in latest_entry and latest_entry['role'] == 'system' and '音声変換機能' in latest_entry.get('content', ''):
+                        # 音声変換が進行中の場合、変換情報を優先
+                        messages.append({
+                            'role': 'system',
+                            'content': '音声変換処理の結果について回答を生成します。'
+                        })
+                    else:
+                        # 通常の履歴処理
+                        for entry in relevant_history:
+                            if entry and isinstance(entry, dict):
+                                messages.append({
+                                    'role': entry.get('role', 'user'),
+                                    'content': entry.get('content', '')
+                                })
 
                 # 現在の質問を追加
-                messages.append({
-                    'role': 'user',
-                    'content': f'{system_prompt}\nそれを踏まえて次の質問に回答してください : {question}'
-                })
+                if context and '音声変換処理の詳細' in context:
+                    messages.append({
+                        'role': 'user',
+                        'content': f'音声変換の結果について報告してください:\n\n{context}'
+                    })
+                else:
+                    messages.append({
+                        'role': 'user',
+                        'content': f'{system_prompt}\nそれを踏まえて次の質問に回答してください : {question}'
+                    })
                 print(messages)
 
                 # ランダム応答でない場合のみ、検索処理を行う
