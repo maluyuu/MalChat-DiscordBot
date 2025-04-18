@@ -371,30 +371,49 @@ async def on_message(message):
                 )
 
                 # 応答が必要かどうかを判定
+                is_mention_or_command = False # 応答必須条件フラグ
                 needs_response = False
                 is_random_response = False
 
-                if message.channel.id in chanID or message.content.startswith('!malChat') or message.content.startswith('!malDebugChat') or message.channel.type == discord.ChannelType.private:
+                # 応答必須条件のチェック
+                if message.channel.id in chanID or \
+                   message.content.startswith('!malChat') or \
+                   message.content.startswith('!malDebugChat') or \
+                   message.channel.type == discord.ChannelType.private:
+                    is_mention_or_command = True
+                elif message.reference:
+                    try: # fetch_message が失敗する可能性を考慮
+                        referenced_message = await message.channel.fetch_message(message.reference.message_id)
+                        if referenced_message.author.id == bot.user.id:
+                            is_mention_or_command = True
+                    except discord.NotFound:
+                        logger.warning(f"Referenced message not found: {message.reference.message_id}")
+                    except discord.HTTPException as e:
+                        logger.error(f"Failed to fetch referenced message: {e}")
+                elif bot.user.mentioned_in(message):
+                    is_mention_or_command = True
+
+                # 応答全体の要否判定
+                if is_mention_or_command:
                     needs_response = True
-                elif message.reference:  # メッセージがリプライである場合
-                    referenced_message = await message.channel.fetch_message(message.reference.message_id)
-                    if referenced_message.author.id == bot.user.id:  # ボットへのリプライの場合
-                        needs_response = True
-                elif bot.user.mentioned_in(message): # botにメンションがあった場合
-                    needs_response = True
-                elif random.random() < 0.00:
+                elif random.random() < 0.00: # ランダム応答確率
                     needs_response = True
                     is_random_response = True
 
                 if needs_response:
                     await message.channel.typing()
 
-                # ランダム応答でない場合のみ、添付ファイルと履歴の処理を行う
-                if not is_random_response:
-                    # 添付ファイルの処理
-                    context, current_files = await process_attachments(message, question) if message.attachments else (None, None)
+                # 応答必須条件が満たされている場合のみ、添付ファイルと履歴の処理を行う
+                context = None
+                current_files = None
+                relevant_history = None
+                relevant_context = None
+                if is_mention_or_command: # 応答必須条件が満たされている場合
+                    if message.attachments:
+                        # 添付ファイルの処理
+                        context, current_files = await process_attachments(message, question)
 
-                    # 関連する履歴と文脈を取得（類似度0.5以上の関連履歴と最新10件）
+                    # 関連する履歴と文脈を取得
                     relevant_history = await chat_history_manager.get_combined_history(
                         query=question,
                         channel_id=channel_id,
@@ -405,140 +424,131 @@ async def on_message(message):
 
                     if relevant_context:
                         question = f"{relevant_context}\nこれを考慮して次の質問に回答してください:\n{question}"
-                else:
-                    context = None
-                    current_files = None
-                    relevant_history = None
-                    relevant_context = None
 
-                # システムプロンプトの構築
-                system_prompt = (
-                    f'あなたの名前は{BOT_NAME}で、maluyuuによって開発されたDiscord botです。\n'
-                    f'現在の時刻は: {dt_now}\n'
-                    f'あなたは以下の機能を持っています：\n'
-                    f'- 音声ファイルの形式変換（MP3, WAV, FLAC, OGG, M4A対応）\n'
-                    f'- ビットレート、サンプルレート、ビット深度の調整\n'
-                    f'以下の情報を考慮して回答してください:\n'
-                )
+                # 応答生成ロジック
+                botAnswer = None # 送信する応答メッセージを初期化
+                if needs_response:
+                    # システムプロンプトの構築 (応答が必要な場合のみ)
+                    system_prompt = (
+                        f'あなたの名前は{BOT_NAME}で、maluyuuによって開発されたDiscord botです。\n'
+                        f'現在の時刻は: {dt_now}\n'
+                        f'あなたは以下の機能を持っています：\n'
+                        f'- 音声ファイルの形式変換（MP3, WAV, FLAC, OGG, M4A対応）\n'
+                        f'- ビットレート、サンプルレート、ビット深度の調整\n'
+                        f'以下の情報を考慮して回答してください:\n'
+                    )
+                    if context: # context は is_mention_or_command が True の場合のみ生成される
+                        system_prompt += f'\n現在のメッセージの添付ファイル:\n{context}\n'
+                    if relevant_context: # relevant_context も同様
+                        system_prompt += f'\n関連する過去のファイル:\n{relevant_context}\n'
 
-                if context:
-                    system_prompt += f'\n現在のメッセージの添付ファイル:\n{context}\n'
+                    # メッセージの作成
+                    messages = []
+                    if relevant_history: # relevant_history も同様
+                        # 最新の履歴エントリを確認
+                        latest_entry = relevant_history[-1] if relevant_history else None
+                        if latest_entry and 'role' in latest_entry and latest_entry['role'] == 'system' and '音声変換機能' in latest_entry.get('content', ''):
+                            # 音声変換が進行中の場合、変換情報を優先
+                            messages.append({
+                                'role': 'system',
+                                'content': '音声変換処理の結果について回答を生成します。'
+                            })
+                        else:
+                            # 通常の履歴処理
+                            for entry in relevant_history:
+                                if entry and isinstance(entry, dict):
+                                    messages.append({
+                                        'role': entry.get('role', 'user'),
+                                        'content': entry.get('content', '')
+                                    })
 
-                if relevant_context:
-                    system_prompt += f'\n関連する過去のファイル:\n{relevant_context}\n'
-
-                # メッセージの作成
-                messages = []
-
-                # 結合した履歴をメッセージリストに追加
-                if relevant_history:  # Noneでない場合のみ処理
-                    # 最新の履歴エントリを確認
-                    latest_entry = relevant_history[-1] if relevant_history else None
-                    if latest_entry and 'role' in latest_entry and latest_entry['role'] == 'system' and '音声変換機能' in latest_entry.get('content', ''):
-                        # 音声変換が進行中の場合、変換情報を優先
+                    # 現在の質問を追加
+                    if context and '音声変換処理の詳細' in context:
                         messages.append({
-                            'role': 'system',
-                            'content': '音声変換処理の結果について回答を生成します。'
+                            'role': 'user',
+                            'content': f'音声変換の結果について報告してください:\n\n{context}'
                         })
                     else:
-                        # 通常の履歴処理
-                        for entry in relevant_history:
-                            if entry and isinstance(entry, dict):
-                                messages.append({
-                                    'role': entry.get('role', 'user'),
-                                    'content': entry.get('content', '')
-                                })
+                        messages.append({
+                            'role': 'user',
+                            'content': f'{system_prompt}\nそれを踏まえて次の質問に回答してください : {question}'
+                        })
+                    print(messages) # デバッグ用
 
-                # 現在の質問を追加
-                if context and '音声変換処理の詳細' in context:
-                    messages.append({
-                        'role': 'user',
-                        'content': f'音声変換の結果について報告してください:\n\n{context}'
-                    })
-                else:
-                    messages.append({
-                        'role': 'user',
-                        'content': f'{system_prompt}\nそれを踏まえて次の質問に回答してください : {question}'
-                    })
-                print(messages)
+                    # 検索処理 (応答必須条件が満たされている場合のみ)
+                    needs_search = False
+                    if is_mention_or_command and any(keyword in question.lower() for keyword in [
+                        '調べ', 'ネットで', '検索', '最新', '最近', '現在', '今',
+                        '事例', '具体例', '情報', 'ニュース'
+                    ]):
+                        needs_search = True
 
-                # ランダム応答でない場合のみ、検索処理を行う
-                needs_search = False
-                if not is_random_response and any(keyword in question.lower() for keyword in [
-                    '調べ', 'ネットで', '検索', '最新', '最近', '現在', '今',
-                    '事例', '具体例', '情報', 'ニュース'
-                ]):
-                    needs_search = True
+                    if needs_search: # is_mention_or_command は既に True
+                        await message.channel.typing() # 検索中に再度 typing 表示
 
-                if needs_search and not is_random_response:
-                    await message.channel.typing()
-                    
+                        search_query = await generate_search_keywords(question)
+                        logger.debug(f"Generated search keywords: {search_query}")
+                        await message.reply(f"次の検索ワードでウェブ検索を開始します : {search_query}", mention_author=False)
+                        links = await web_processing.get_links(search_query)
+                        if links:
+                            search_results = await web_processing.extract_data_from_links(links, search_query)
+                            await message.reply('検索が完了しました。回答を生成します...', mention_author=False)
 
-                    search_query = await generate_search_keywords(question)
-                    logger.debug(f"Generated search keywords: {search_query}")
-                    await message.reply(f"次の検索ワードでウェブ検索を開始します : {search_query}", mention_author=False)
-                    links = await web_processing.get_links(search_query)
-                    if links:
-                        search_results = await web_processing.extract_data_from_links(links, search_query)
-                        await message.reply('検索が完了しました。回答を生成します...', mention_author=False)
+                            response = await chat_with_model(get_bot_model(), messages=[
+                                {
+                                    'role': 'user',
+                                    'content': (
+                                        f'以下の検索結果を基に、質問に詳しく回答してください。\n\n{search_results}\n\n質問:\n{question}'
+                                    )
+                                }
+                            ])
 
-                        response = await chat_with_model(get_bot_model(), messages=[
-                            {
-                                'role': 'user',
-                                'content': (
-                                    f'以下の検索結果を基に、質問に詳しく回答してください。\n\n{search_results}\n\n質問:\n{question}'
-                                )
-                            }
-                        ])
-
-                        botAnswer = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
-                        logger.info(f"Channel ID: {channel_id}, Bot Response (search): {botAnswer}")
-                        await message.reply(botAnswer, mention_author=False)
-                    else:
-                        await message.reply('申し訳ありません。関連する情報が見つかりませんでした。', mention_author=False)
-                elif needs_response:
-                    # 検索が不要な場合は、ファイル情報のみを使用
-                    if context:
-                        response = await chat_with_model(get_bot_model(), messages=[
-                            {
-                                'role': 'user',
-                                'content': (
-                                    f'以下のファイル情報を基に、質問に回答してください。\n\n{context}\n\n質問:\n{question}'
-                                )
-                            }
-                        ])
-                        botAnswer = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
-                        logger.info(f"Channel ID: {channel_id}, Bot Response (file): {botAnswer}")
-                        await message.reply(botAnswer, mention_author=False)
-                    else:
-                        # 通常の質問応答を実行
+                            botAnswer = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
+                            logger.info(f"Channel ID: {channel_id}, Bot Response (search): {botAnswer}")
+                        else:
+                            botAnswer = '申し訳ありません。関連する情報が見つかりませんでした。'
+                            logger.info(f"Channel ID: {channel_id}, Bot Response (search failed)")
+                    else: # 検索不要の場合 (needs_response は True)
+                        # 通常の質問応答を実行 (ファイル情報も messages に含まれているはず)
                         response = await chat_with_model(get_bot_model(), messages=messages)
                         botAnswer = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
-                        logger.info(f"Channel ID: {channel_id}, Bot Response (normal): {botAnswer}")
+                        logger.info(f"Channel ID: {channel_id}, Bot Response (normal/file): {botAnswer}")
 
-                        # メッセージが2000文字を超える場合は分割して送信
-                        if len(botAnswer) > 2000:
-                            # メッセージを分割
-                            chunks = []
-                            for i in range(0, len(botAnswer), 1900):  # 余裕を持って1900文字ずつ
-                                chunk = botAnswer[i:i + 1900]
-                                # コードブロックの途中で分割される場合の処理
-                                if '```' in botAnswer:
-                                    # コードブロックの開始位置を確認
-                                    code_start = chunk.count('```') % 2 == 1
-                                    if code_start:
-                                        chunk += '\n```'  # コードブロックを閉じる
-                                        if i + 1900 < len(botAnswer):  # 次のチャンクがある場合
-                                            next_chunk = '```\n'  # 次のチャンクの先頭にコードブロックを開始
-                                chunks.append(chunk)
+                # 応答メッセージの送信処理
+                if botAnswer: # botAnswer が生成された場合のみ送信
+                    # メッセージが2000文字を超える場合は分割して送信
+                    if len(botAnswer) > 2000:
+                        # メッセージを分割 (コードブロック対応改善)
+                        chunks = []
+                        current_chunk = ""
+                        in_code_block = False
+                        for line in botAnswer.splitlines(keepends=True):
+                            if len(current_chunk) + len(line) > 1900:
+                                if in_code_block:
+                                    current_chunk += '```' # コードブロックを閉じる
+                                chunks.append(current_chunk)
+                                current_chunk = ""
+                                if in_code_block:
+                                    current_chunk += '```\n' # 次のチャンクでコードブロックを開始
 
-                            # 分割したメッセージを順番に送信
-                            for i, chunk in enumerate(chunks, 1):
-                                header = f"(分割メッセージ {i}/{len(chunks)})\n" if len(chunks) > 1 else ""
-                                await message.reply(f"{header}{chunk}", mention_author=False)
-                                await asyncio.sleep(1)  # レート制限を避けるため少し待機
-                        else:
-                            await message.reply(botAnswer, mention_author=False)
+                            current_chunk += line
+                            # 行末の ``` で判定するのではなく、行全体が ``` かどうかで判定
+                            if line.strip() == '```':
+                                in_code_block = not in_code_block
+
+                        if current_chunk: # 最後のチャンクを追加
+                            # 最後のチャンクがコードブロックの途中で終わっている場合、閉じる
+                            if in_code_block and current_chunk.count('```') % 2 == 1:
+                                 current_chunk += '\n```'
+                            chunks.append(current_chunk)
+
+                        # 分割したメッセージを順番に送信
+                        for i, chunk in enumerate(chunks, 1):
+                            header = f"(分割メッセージ {i}/{len(chunks)})\n" if len(chunks) > 1 else ""
+                            await message.reply(f"{header}{chunk}", mention_author=False)
+                            await asyncio.sleep(1)  # レート制限を避けるため少し待機
+                    else:
+                        await message.reply(botAnswer, mention_author=False)
             except Exception as e:
                 await message.reply(f"メッセージ処理中にエラーが発生: {str(e)}", mention_author=False)
                 raise
